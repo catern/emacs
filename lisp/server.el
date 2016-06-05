@@ -352,6 +352,9 @@ Updates `server-clients'."
 	  (when (and terminal (eq (terminal-live-p terminal) t))
 	    (delete-terminal terminal))))
 
+      ;; Delete associated processes using this client's fds
+      (mapc #'delete-process (process-get proc :pipelines))
+
       ;; Delete the client's process.
       (if (eq (process-status proc) 'open)
 	  (delete-process proc))
@@ -670,6 +673,7 @@ server or call `\\[server-force-delete]' to forcibly disconnect it."))
 				 :plist '(:authenticated nil))
 			 (list :family 'local
 			       :service server-file
+			       :ancillary-data t
 			       :plist '(:authenticated t)))))
 	  (unless server-process (error "Could not start server process"))
 	  (process-put server-process :server-file server-file)
@@ -915,7 +919,7 @@ This handles splitting the command if it would be bigger than
     (process-put proc 'continuation nil)
     (if continuation (ignore-errors (funcall continuation)))))
 
-(cl-defun server-process-filter (proc string)
+(cl-defun server-process-filter (proc string &optional ancillary)
   "Process a request from the server to edit some files.
 PROC is the server process.  STRING consists of a sequence of
 commands prefixed by a dash.  Some commands have arguments;
@@ -1015,6 +1019,9 @@ The following commands are accepted by the client:
   Suspend this terminal, i.e., stop the client process.
   Sent when the user presses C-z."
   (server-log (concat "Received " string) proc)
+  (when ancillary
+    (server-log (format "Received fds %s" ancillary) proc)
+    (process-put proc :fds ancillary))
   ;; First things first: let's check the authentication
   (unless (process-get proc :authenticated)
     (if (and (string-match "-auth \\([!-~]+\\)\n?" string)
@@ -1262,6 +1269,50 @@ The following commands are accepted by the client:
     ;; condition-case
     (error (server-return-error proc err))))
 
+(defvar server-emacsclient-proc nil
+  "Non-nil if running commands for a client of our server.
+If we are currently evaluating Lisp in response to client commands,
+this variable contains the process for communicating with that
+client.")
+
+(defun server-pager-sentinel (proc event)
+  (internal-default-process-sentinel proc event)
+  (when (equal event "finished\n")
+    (let ((emacsclient (process-get proc :emacsclient)))
+      (setf (process-get emacsclient :pipelines)
+            (delq proc (process-get emacsclient :pipelines)))
+      (server-delete-client emacsclient))))
+
+(defun server-pager ()
+  "Start a process reading from FDs passed in by the current client.
+This function will start a process which will begin reading from the
+FDs passed in by the current client and copying their input to a
+*pager* buffer.
+
+This function should only be run by passing --eval to an emacsclient
+that also has the -l or --pipeline option, like so:
+   echo some data | emacsclient -l --eval '(server-pager)'"
+  ;; we remove two fds from the emacsclient process, and add ourselves
+  ;; in for later deletion when the emacsclient quits
+  (if (null server-emacsclient-proc)
+      (error "Cannot be run out of emacsclient --eval context")
+    (let ((buf (get-buffer "*pager*")))
+      (when buf (kill-buffer buf)))
+    (let* ((infd (pop (process-get server-emacsclient-proc :fds)))
+           (outfd (pop (process-get server-emacsclient-proc :fds)))
+           (buffer (generate-new-buffer "*pager*"))
+           (proc (make-fd-process :name "pager-proc"
+                                  :buffer buffer
+                                  :noquery t
+                                  :sentinel #'server-pager-sentinel
+                                  :infd infd
+                                  :outfd outfd
+                                  :plist (list :emacsclient server-emacsclient-proc))))
+      (push proc (process-get server-emacsclient-proc :pipelines))
+      (pop-to-buffer buffer)
+      proc)))
+
+
 (defun server-execute (proc files nowait commands dontkill frame tty-name)
   ;; This is run from timers and process-filters, i.e. "asynchronously".
   ;; But w.r.t the user, this is not really asynchronous since the timer
@@ -1272,7 +1323,8 @@ The following commands are accepted by the client:
   ;; including code that needs to wait.
   (with-local-quit
     (condition-case err
-        (let ((buffers (server-visit-files files proc nowait)))
+        (let ((buffers (server-visit-files files proc nowait))
+              (server-emacsclient-proc proc))
           (mapc 'funcall (nreverse commands))
 
 	  ;; If we were told only to open a new client, obey
@@ -1294,7 +1346,7 @@ The following commands are accepted by the client:
             ;; Client requested nowait; return immediately.
             (server-log "Close nowait client" proc)
             (server-delete-client proc))
-           ((and (not dontkill) (null buffers))
+           ((and (not dontkill) (null buffers) (null (process-get proc :pipelines)))
             ;; This client is empty; get rid of it immediately.
             (server-log "Close empty client" proc)
             (server-delete-client proc)))
