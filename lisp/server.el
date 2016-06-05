@@ -1275,42 +1275,86 @@ If we are currently evaluating Lisp in response to client commands,
 this variable contains the process for communicating with that
 client.")
 
+(defvar server-pager-active-list nil
+  "List of all active pager processes in order of creation.")
+
+;; TODO make a function that is basically "server-delete-client-maybe"
+;; which will delete the client iff there are no more resources
+;; (buffers, frames, pipelines) associated with it
 (defun server-pager-sentinel (proc event)
   (internal-default-process-sentinel proc event)
-  (when (equal event "finished\n")
-    (let ((emacsclient (process-get proc :emacsclient)))
-      (setf (process-get emacsclient :pipelines)
-            (delq proc (process-get emacsclient :pipelines)))
+  (let ((emacsclient (process-get proc :emacsclient)))
+    (setf (process-get emacsclient :pipelines)
+          (delq proc (process-get emacsclient :pipelines)))
+    (setf server-pager-active-list
+          (delq proc server-pager-active-list))
+    (when (= 0 (let ((frame-num 0))
+                 (dolist (f (frame-list))
+                   (when (eq emacsclient (frame-parameter f 'client))
+                     (setq frame-num (1+ frame-num))))
+                 frame-num))
       (server-delete-client emacsclient))))
 
-(defun server-pager ()
+(defun server-pager-tap-filter (proc text)
+  (internal-default-process-filter proc text)
+  (process-send-string proc text))
+
+(defun server-pager (&optional name tap)
   "Start a process reading from FDs passed in by the current client.
 This function will start a process which will begin reading from the
 FDs passed in by the current client and copying their input to a
-*pager* buffer.
+buffer.
+
+NAME is the name of the buffer to copy input to; if nil, *pager* is
+used. If NAME is an empty string, that is treated as equivalent to
+nil, for ease of use from the command line.
+
+If TAP is non-nil, all input to the stdin of the client will be copied
+also to the stdout of the client, allowing a client invoking
+server-pager to be inserted in the middle of a pipeline.
 
 This function should only be run by passing --eval to an emacsclient
 that also has the -l or --pipeline option, like so:
    echo some data | emacsclient -l --eval '(server-pager)'"
   ;; we remove two fds from the emacsclient process, and add ourselves
   ;; in for later deletion when the emacsclient quits
-  (if (null server-emacsclient-proc)
-      (error "Cannot be run out of emacsclient --eval context")
-    (let ((buf (get-buffer "*pager*")))
-      (when buf (kill-buffer buf)))
-    (let* ((infd (pop (process-get server-emacsclient-proc :fds)))
-           (outfd (pop (process-get server-emacsclient-proc :fds)))
-           (buffer (generate-new-buffer "*pager*"))
-           (proc (make-fd-process :name "pager-proc"
-                                  :buffer buffer
-                                  :noquery t
-                                  :sentinel #'server-pager-sentinel
-                                  :infd infd
-                                  :outfd outfd
-                                  :plist (list :emacsclient server-emacsclient-proc))))
-      (push proc (process-get server-emacsclient-proc :pipelines))
-      (pop-to-buffer buffer)
-      proc)))
+  (when (equal "" name) (setq name nil))
+  (with-current-buffer (or (and name (get-buffer-create name))
+                           (generate-new-buffer "*pager*"))
+    (if (null server-emacsclient-proc)
+        (error "Cannot be run out of emacsclient --eval context")
+      (let* ((infd (pop (process-get server-emacsclient-proc :fds)))
+             (outfd (pop (process-get server-emacsclient-proc :fds)))
+             (proc (make-fd-process :name (if name (concat name "-proc") "pager-proc")
+                                    :buffer (current-buffer)
+                                    :noquery t
+                                    :sentinel #'server-pager-sentinel
+                                    :filter (if tap #'server-pager-tap-filter
+                                              #'internal-default-process-filter)
+                                    :infd infd
+                                    :outfd outfd
+                                    :plist (list :emacsclient server-emacsclient-proc))))
+        (push proc (process-get server-emacsclient-proc :pipelines))
+        (add-to-list 'server-pager-active-list proc 'append)
+        (pop-to-buffer (current-buffer) '(display-buffer-same-window . nil))
+        proc))))
+
+(defun server-pager-show-active (&optional _ frame)
+  "Displays all active pagers in windows on the current frame."
+  (interactive)
+  (delete-other-windows)
+  (let ((buffers (mapcar #'process-buffer server-pager-active-list))
+        (window (frame-selected-window frame))
+        (windows (list (selected-window))))
+    (dotimes (_ (- (length buffers) 1))
+      (setq window (split-window window nil 'right))
+      (message "window: %s, windows: %s" window windows)
+      (push window windows)
+      (balance-windows))
+    (setq windows (nreverse windows))
+    (message "%s %s" windows buffers)
+    (cl-mapcar #'set-window-buffer windows buffers)
+    (redisplay)))
 
 
 (defun server-execute (proc files nowait commands dontkill frame tty-name)
