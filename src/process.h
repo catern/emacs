@@ -166,6 +166,8 @@ struct Lisp_Process
     bool_bf is_non_blocking_client : 1;
     /* Whether this is a server or a client socket. */
     bool_bf is_server : 1;
+    /* Whether the filter should have ancillary data passed to it */
+    bool_bf ancillary_data : 1;
     int raw_status;
     /* The length of the socket backlog. */
     int backlog;

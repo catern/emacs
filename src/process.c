@@ -21,6 +21,7 @@ along with GNU Emacs.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include <config.h>
 
+#include <sys/socket.h>
 #include <stdio.h>
 #include <errno.h>
 #include <sys/types.h>		/* Some typedefs are used in sys/file.h.  */
@@ -2085,6 +2086,157 @@ create_pty (Lisp_Object process)
   p->pid = -2;
 }
 
+DEFUN ("make-fd-process", Fmake_fd_process, Smake_fd_process,
+       0, MANY, 0,
+       doc: /* Create a process from passed file descriptors.
+
+:infd FD
+
+:outfd FD
+
+usage:  (make-fd-process &rest ARGS)  */)
+  (ptrdiff_t nargs, Lisp_Object *args)
+{
+  Lisp_Object proc, contact;
+  struct Lisp_Process *p;
+  Lisp_Object name, buffer;
+  Lisp_Object tem;
+  int infd, outfd;
+  ptrdiff_t specpdl_count;
+  int inchannel, outchannel;
+
+  if (nargs == 0)
+    return Qnil;
+
+  contact = Flist (nargs, args);
+
+  infd = XINT (Fplist_get (contact, QCinfd));
+  outfd = XINT (Fplist_get (contact, QCoutfd));
+
+  name = Fplist_get (contact, QCname);
+  CHECK_STRING (name);
+  proc = make_process (name);
+  specpdl_count = SPECPDL_INDEX ();
+  record_unwind_protect (remove_process, proc);
+  p = XPROCESS (proc);
+
+  outchannel = outfd;
+  inchannel = infd;
+  p->open_fd[WRITE_TO_SUBPROCESS] = outfd;
+  p->open_fd[READ_FROM_SUBPROCESS] = infd;
+
+  fcntl (inchannel, F_SETFL, O_NONBLOCK);
+  fcntl (outchannel, F_SETFL, O_NONBLOCK);
+
+#ifdef WINDOWSNT
+  register_aux_fd (inchannel);
+#endif
+
+  /* Record this as an active process, with its channels.  */
+  chan_process[inchannel] = proc;
+  p->infd = inchannel;
+  p->outfd = outchannel;
+
+  if (inchannel > max_process_desc)
+    max_process_desc = inchannel;
+
+  buffer = Fplist_get (contact, QCbuffer);
+  if (NILP (buffer))
+    buffer = name;
+  buffer = Fget_buffer_create (buffer);
+  pset_buffer (p, buffer);
+
+  pset_childp (p, contact);
+  pset_plist (p, Fcopy_sequence (Fplist_get (contact, QCplist)));
+  pset_type (p, Qpipe);
+  pset_sentinel (p, Fplist_get (contact, QCsentinel));
+  pset_filter (p, Fplist_get (contact, QCfilter));
+  pset_log (p, Qnil);
+  if (tem = Fplist_get (contact, QCnoquery), !NILP (tem))
+    p->kill_without_query = 1;
+  if (tem = Fplist_get (contact, QCstop), !NILP (tem))
+    pset_command (p, Qt);
+  eassert (! p->pty_flag);
+
+  if (!EQ (p->command, Qt))
+    {
+      FD_SET (inchannel, &input_wait_mask);
+      FD_SET (inchannel, &non_keyboard_wait_mask);
+    }
+  p->adaptive_read_buffering
+    = (NILP (Vprocess_adaptive_read_buffering) ? 0
+       : EQ (Vprocess_adaptive_read_buffering, Qt) ? 1 : 2);
+
+  /* Make the process marker point into the process buffer (if any).  */
+  if (BUFFERP (buffer))
+    set_marker_both (p->mark, buffer,
+		     BUF_ZV (XBUFFER (buffer)),
+		     BUF_ZV_BYTE (XBUFFER (buffer)));
+
+  {
+    /* Setup coding systems for communicating with the network stream.  */
+
+    /* Qt denotes we have not yet called Ffind_operation_coding_system.  */
+    Lisp_Object coding_systems = Qt;
+    Lisp_Object val;
+
+    tem = Fplist_get (contact, QCcoding);
+    val = Qnil;
+    if (!NILP (tem))
+      {
+	val = tem;
+	if (CONSP (val))
+	  val = XCAR (val);
+      }
+    else if (!NILP (Vcoding_system_for_read))
+      val = Vcoding_system_for_read;
+    else if ((!NILP (buffer) && NILP (BVAR (XBUFFER (buffer), enable_multibyte_characters)))
+	     || (NILP (buffer) && NILP (BVAR (&buffer_defaults, enable_multibyte_characters))))
+      /* We dare not decode end-of-line format by setting VAL to
+	 Qraw_text, because the existing Emacs Lisp libraries
+	 assume that they receive bare code including a sequence of
+	 CR LF.  */
+      val = Qnil;
+    else
+      {
+	if (CONSP (coding_systems))
+	  val = XCAR (coding_systems);
+	else if (CONSP (Vdefault_process_coding_system))
+	  val = XCAR (Vdefault_process_coding_system);
+	else
+	  val = Qnil;
+      }
+    pset_decode_coding_system (p, val);
+
+    if (!NILP (tem))
+      {
+	val = tem;
+	if (CONSP (val))
+	  val = XCDR (val);
+      }
+    else if (!NILP (Vcoding_system_for_write))
+      val = Vcoding_system_for_write;
+    else if (NILP (BVAR (current_buffer, enable_multibyte_characters)))
+      val = Qnil;
+    else
+      {
+	if (CONSP (coding_systems))
+	  val = XCDR (coding_systems);
+	else if (CONSP (Vdefault_process_coding_system))
+	  val = XCDR (Vdefault_process_coding_system);
+	else
+	  val = Qnil;
+      }
+    pset_encode_coding_system (p, val);
+  }
+  /* This may signal an error.  */
+  setup_process_coding_systems (proc);
+
+  specpdl_ptr = specpdl + specpdl_count;
+
+  return proc;
+}
+
 DEFUN ("make-pipe-process", Fmake_pipe_process, Smake_pipe_process,
        0, MANY, 0,
        doc: /* Create and return a bidirectional pipe process.
@@ -3919,6 +4071,7 @@ usage: (make-network-process &rest ARGS)  */)
     p->kill_without_query = 1;
   if ((tem = Fplist_get (contact, QCstop), !NILP (tem)))
     pset_command (p, Qt);
+  p->ancillary_data = !NILP (Fplist_get (contact, QCancillary_data));
   p->pid = 0;
   p->backlog = 5;
   p->is_non_blocking_client = false;
@@ -4573,6 +4726,11 @@ server_accept_connection (Lisp_Object server, int channel)
   fcntl (s, F_SETFL, O_NONBLOCK);
 
   p = XPROCESS (proc);
+
+  /* TODO: I think this is supposed to be done by checking for a
+     property in contact, not by just copying the field from the
+     server process, but I'm not sure exactly what is correct */
+  p->ancillary_data = ps->ancillary_data;
 
   /* Build new contact information for this setup.  */
   contact = Fcopy_sequence (ps->childp);
@@ -5587,6 +5745,7 @@ read_process_output_error_handler (Lisp_Object error_val)
 static void
 read_and_dispose_of_process_output (struct Lisp_Process *p, char *chars,
 				    ssize_t nbytes,
+				    Lisp_Object *fds, size_t nfds,
 				    struct coding_system *coding);
 
 /* Read pending output from the process channel,
@@ -5611,6 +5770,9 @@ read_process_output (Lisp_Object proc, int channel)
   ptrdiff_t count = SPECPDL_INDEX ();
   Lisp_Object odeactivate;
   char chars[sizeof coding->carryover + readmax];
+  char cbuf[512] = {};
+  int nfds = 0;
+  int *fd_data = NULL;
 
   if (carryover)
     /* See the comment above.  */
@@ -5639,8 +5801,34 @@ read_process_output (Lisp_Object proc, int channel)
 				    readmax - buffered);
       else
 #endif
-	nbytes = emacs_read (channel, chars + carryover + buffered,
-			     readmax - buffered);
+	{
+	  struct stat statbuf;
+	  fstat(channel, &statbuf);
+	  if (S_ISSOCK(statbuf.st_mode) && p->ancillary_data) {
+	    /* we declare cbuf outside of here since it is the backing
+	       storage for the fd_data array */
+	    struct iovec iov = { .iov_base = chars + carryover + buffered,
+				 .iov_len = readmax - buffered, };
+	    struct msghdr msgh = { .msg_iov = &iov,
+				   .msg_iovlen = 1,
+				   .msg_control = cbuf,
+				   .msg_controllen = sizeof cbuf, };
+	    nbytes = recvmsg(channel, &msgh, MSG_CMSG_CLOEXEC);
+	    /* check for control messages */
+	    for (struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msgh); cmsg != NULL;
+		 cmsg = CMSG_NXTHDR(&msgh, cmsg)) {
+	      if (cmsg->cmsg_level == SOL_SOCKET
+		  && cmsg->cmsg_type == SCM_RIGHTS) {
+		nfds = cmsg->cmsg_len / (sizeof(int));
+		fd_data = (int *) CMSG_DATA(cmsg);
+	      }
+	    }
+	  } else {
+	    nbytes = emacs_read (channel, chars + carryover + buffered,
+				 readmax - buffered);
+	  }
+	}
+
       if (nbytes > 0 && p->adaptive_read_buffering)
 	{
 	  int delay = p->read_output_delay;
@@ -5669,6 +5857,12 @@ read_process_output (Lisp_Object proc, int channel)
       nbytes += buffered;
       nbytes += buffered && nbytes <= 0;
     }
+  /* if we saw any fds, put them in an array of Lisp_Objects; this is
+     a no-op if we saw no fds */
+  Lisp_Object fds[nfds];
+  for (int i = 0; i < nfds; i++) {
+    fds[i] = make_number(fd_data[i]);
+  }
 
   p->decoding_carryover = 0;
 
@@ -5690,7 +5884,7 @@ read_process_output (Lisp_Object proc, int channel)
      friends don't expect current-buffer to be changed from under them.  */
   record_unwind_current_buffer ();
 
-  read_and_dispose_of_process_output (p, chars, nbytes, coding);
+  read_and_dispose_of_process_output (p, chars, nbytes, fds, nfds, coding);
 
   /* Handling the process output should not deactivate the mark.  */
   Vdeactivate_mark = odeactivate;
@@ -5702,6 +5896,7 @@ read_process_output (Lisp_Object proc, int channel)
 static void
 read_and_dispose_of_process_output (struct Lisp_Process *p, char *chars,
 				    ssize_t nbytes,
+				    Lisp_Object *fds, size_t nfds,
 				    struct coding_system *coding)
 {
   Lisp_Object outstream = p->filter;
@@ -5775,14 +5970,20 @@ read_and_dispose_of_process_output (struct Lisp_Process *p, char *chars,
 	      coding->carryover_bytes);
       p->decoding_carryover = coding->carryover_bytes;
     }
-  if (SBYTES (text) > 0)
+  if (SBYTES (text) > 0) {
     /* FIXME: It's wrong to wrap or not based on debug-on-error, and
        sometimes it's simply wrong to wrap (e.g. when called from
        accept-process-output).  */
+    Lisp_Object form;
+    if (p->ancillary_data)
+      form = list4 (outstream, make_lisp_proc (p), text, Flist(nfds, fds));
+    else
+      form = list3 (outstream, make_lisp_proc (p), text);
     internal_condition_case_1 (read_process_output_call,
-			       list3 (outstream, make_lisp_proc (p), text),
+			       form,
 			       !NILP (Vdebug_on_error) ? Qnil : Qerror,
 			       read_process_output_error_handler);
+  }
 
   /* If we saved the match data nonrecursively, restore it now.  */
   restore_search_regs ();
@@ -7866,6 +8067,7 @@ syms_of_process (void)
   DEFSYM (QCnowait, ":nowait");
   DEFSYM (QCsentinel, ":sentinel");
   DEFSYM (QCuse_external_socket, ":use-external-socket");
+  DEFSYM (QCancillary_data, ":ancillary-data");
   DEFSYM (QCtls_parameters, ":tls-parameters");
   DEFSYM (Qnsm_verify_connection, "nsm-verify-connection");
   DEFSYM (QClog, ":log");
@@ -7877,6 +8079,8 @@ syms_of_process (void)
   DEFSYM (QCstderr, ":stderr");
   DEFSYM (Qpty, "pty");
   DEFSYM (Qpipe, "pipe");
+  DEFSYM (QCinfd, ":infd");
+  DEFSYM (QCoutfd, ":outfd");
 
   DEFSYM (Qlast_nonmenu_event, "last-nonmenu-event");
 
@@ -7979,6 +8183,7 @@ The variable takes effect when `start-process' is called.  */);
   defsubr (&Sprocess_list);
   defsubr (&Smake_process);
   defsubr (&Smake_pipe_process);
+  defsubr (&Smake_fd_process);
   defsubr (&Sserial_process_configure);
   defsubr (&Smake_serial_process);
   defsubr (&Sset_network_process_option);
