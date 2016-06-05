@@ -76,6 +76,7 @@ char *w32_getenv (const char *);
 #include <stdio.h>
 #include <getopt.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #include <pwd.h>
 #include <sys/stat.h>
@@ -118,6 +119,12 @@ int quiet = 0;
 
 /* Nonzero means args are expressions to be evaluated.  --eval.  */
 int eval = 0;
+
+/* Nonzero means we will pass stdin/stdout/stderr to Emacs.  --pipeline.  */
+int pipeline = 0;
+
+/* Nonzero means pass stdin/stdout/stderr to Emacs on next write. */
+int send_fds_once = 0;
 
 /* Nonzero means don't open a new frame.  Inverse of --create-frame.  */
 int current_frame = 1;
@@ -163,6 +170,7 @@ struct option longopts[] =
   { "version",	no_argument,	   NULL, 'V' },
   { "tty",	no_argument,       NULL, 't' },
   { "nw",	no_argument,       NULL, 't' },
+  { "pipeline", no_argument,       NULL, 'l' },
   { "create-frame", no_argument,   NULL, 'c' },
   { "alternate-editor", required_argument, NULL, 'a' },
   { "frame-parameters", required_argument, NULL, 'F' },
@@ -468,7 +476,7 @@ decode_options (int argc, char **argv)
     {
       int opt = getopt_long_only (argc, argv,
 #ifndef NO_SOCKETS_IN_FILE_SYSTEM
-			     "VHneqa:s:f:d:F:tc",
+			     "VHneqla:s:f:d:F:tc",
 #else
 			     "VHneqa:f:d:F:tc",
 #endif
@@ -491,6 +499,11 @@ decode_options (int argc, char **argv)
 #ifndef NO_SOCKETS_IN_FILE_SYSTEM
 	case 's':
 	  socket_name = optarg;
+	  break;
+
+	case 'l':
+	  pipeline = 1;
+	  send_fds_once = 1;
 	  break;
 #endif
 
@@ -738,7 +751,33 @@ send_to_emacs (HSOCKET s, const char *data)
       if (sblen == SEND_BUFFER_SIZE
 	  || (sblen > 0 && send_buffer[sblen-1] == '\n'))
 	{
-	  int sent = send (s, send_buffer, sblen, 0);
+	  int sent;
+	  if (send_fds_once) {
+	    struct iovec iov;
+	    struct msghdr msgh;
+	    char cbuf[512] = {};
+	    iov = (struct iovec) { .iov_base = send_buffer,
+				   .iov_len = sblen, };
+	    msgh = (struct msghdr) { .msg_iov = &iov,
+				     .msg_iovlen = 1,
+				     .msg_control = cbuf,
+				     .msg_controllen = sizeof cbuf, };
+	    struct cmsghdr *cmsg;
+	    int myfds[3] = { 0, 1, 2 };
+	    cmsg = CMSG_FIRSTHDR(&msgh);
+	    cmsg->cmsg_level = SOL_SOCKET;
+	    cmsg->cmsg_type = SCM_RIGHTS;
+	    cmsg->cmsg_len = CMSG_LEN(sizeof (myfds));
+	    /* Initialize the payload: */
+	    memcpy(CMSG_DATA(cmsg), myfds, sizeof (myfds));
+	    /* Sum of the length of all control messages in the buffer: */
+	    msgh.msg_controllen = cmsg->cmsg_len;
+
+	    sent = sendmsg (s, &msgh, 0);
+	    send_fds_once = 0;
+	  } else {
+	    sent = send (s, send_buffer, sblen, 0);
+	  }
 	  if (sent < 0)
 	    {
 	      message (true, "%s: failed to send %d bytes to socket: %s\n",
@@ -1019,7 +1058,7 @@ static int
 find_tty (const char **tty_type, const char **tty_name, int noabort)
 {
   const char *type = egetenv ("TERM");
-  const char *name = ttyname (fileno (stdout));
+  const char *name = ttyname (fileno (stderr));
 
   if (!name)
     {
