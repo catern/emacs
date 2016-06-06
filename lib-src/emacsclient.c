@@ -436,6 +436,7 @@ static void message (bool, const char *, ...) ATTRIBUTE_FORMAT_PRINTF (2, 3);
 static void
 message (bool is_error, const char *format, ...)
 {
+  if (quiet > 1) return;
   va_list args;
 
   va_start (args, format);
@@ -503,6 +504,7 @@ decode_options (int argc, char **argv)
 
 	case 'l':
 	  pipeline = 1;
+	  quiet = 2;
 	  send_fds_once = 1;
 	  break;
 #endif
@@ -528,7 +530,7 @@ decode_options (int argc, char **argv)
 	  break;
 
 	case 'q':
-	  quiet = 1;
+	  quiet++;
 	  break;
 
 	case 'V':
@@ -643,6 +645,7 @@ The following OPTIONS are accepted:\n\
 -e, --eval    		Evaluate the FILE arguments as ELisp expressions\n\
 -n, --no-wait		Don't wait for the server to return\n\
 -q, --quiet		Don't display messages on success\n\
+			Pass twice to suppress absolutely all output\n\
 -d DISPLAY, --display=DISPLAY\n\
 			Visit the file in the given display\n\
 ", "\
@@ -1542,7 +1545,8 @@ start_daemon_and_retry_set_socket (void)
     }
   else if (dpid < 0)
     {
-      fprintf (stderr, "Error: Cannot fork!\n");
+      if (quiet <= 1)
+	fprintf (stderr, "Error: Cannot fork!\n");
       exit (EXIT_FAILURE);
     }
   else
@@ -1899,6 +1903,7 @@ main (int argc, char **argv)
             }
           else if (strprefix ("-print ", p))
             {
+	      if (quiet > 1) continue;
               /* -print STRING: Print STRING on the terminal. */
               str = unquote_argument (p + strlen ("-print "));
               if (needlf)
@@ -1908,6 +1913,7 @@ main (int argc, char **argv)
             }
           else if (strprefix ("-print-nonl ", p))
             {
+	      if (quiet > 1) continue;
               /* -print-nonl STRING: Print STRING on the terminal.
                  Used to continue a preceding -print command.  */
               str = unquote_argument (p + strlen ("-print-nonl "));
@@ -1916,6 +1922,7 @@ main (int argc, char **argv)
             }
           else if (strprefix ("-error ", p))
             {
+	      if (quiet > 1) continue;
               /* -error DESCRIPTION: Signal an error on the terminal. */
               str = unquote_argument (p + strlen ("-error "));
               if (needlf)
@@ -1947,7 +1954,8 @@ main (int argc, char **argv)
 
   if (needlf)
     printf ("\n");
-  fflush (stdout);
+  if (quiet <= 1)
+    fflush (stdout);
   while (fdatasync (1) != 0 && errno == EINTR)
     continue;
 
