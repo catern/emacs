@@ -119,6 +119,9 @@ int quiet = 0;
 /* Nonzero means args are expressions to be evaluated.  --eval.  */
 int eval = 0;
 
+/* Nonzero means to force all output to stderr.  --force-stderr.  */
+int force_stderr = 0;
+
 /* Nonzero means don't open a new frame.  Inverse of --create-frame.  */
 int current_frame = 1;
 
@@ -172,6 +175,7 @@ struct option longopts[] =
   { "server-file",	required_argument, NULL, 'f' },
   { "display",	required_argument, NULL, 'd' },
   { "parent-id", required_argument, NULL, 'p' },
+  { "force-stderr",	no_argument,	   NULL, 'r' },
   { 0, 0, 0, 0 }
 };
 
@@ -464,7 +468,7 @@ term_message (bool is_error, const char *format, ...)
 
   va_start (args, format);
 
-  FILE *f = is_error ? stderr : stdout;
+  FILE *f = (is_error || force_stderr) ? stderr : stdout;
 
   vfprintf (f, format, args);
   fflush (f);
@@ -483,9 +487,9 @@ decode_options (int argc, char **argv)
     {
       int opt = getopt_long_only (argc, argv,
 #ifndef NO_SOCKETS_IN_FILE_SYSTEM
-			     "VHneqa:s:f:d:F:tc",
+			     "VHneqa:s:f:d:F:tcr",
 #else
-			     "VHneqa:f:d:F:tc",
+			     "VHneqa:f:d:F:tcr",
 #endif
 			     longopts, 0);
 
@@ -558,6 +562,10 @@ decode_options (int argc, char **argv)
 
         case 'F':
           frame_parameters = optarg;
+          break;
+
+        case 'r':
+          force_stderr = 1;
           break;
 
 	default:
