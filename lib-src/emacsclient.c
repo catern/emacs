@@ -1042,7 +1042,7 @@ static int
 find_tty (const char **tty_type, const char **tty_name, int noabort)
 {
   const char *type = egetenv ("TERM");
-  const char *name = ttyname (fileno (stdout));
+  const char *name = ttyname (fileno (stderr));
 
   if (!name)
     {
