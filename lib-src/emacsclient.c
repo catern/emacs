@@ -1622,6 +1622,35 @@ start_daemon_and_retry_set_socket (void)
 #endif	/* WINDOWSNT */
 }
 
+int write_all (int fd, char *buf, size_t size);
+int
+write_all (int fd, char *buf, size_t size)
+{
+  int ret;
+  while (size > 0) {
+    ret = write (fd, buf, size);
+    if (ret == -1) return -1;
+    size -= ret;
+  }
+  return 0;
+}
+
+int start_proxying (char *buf, size_t size);
+int
+start_proxying (char *buf, size_t size)
+{
+  int ret;
+
+  /* not actually proxying output from emacs to our stdout yet */
+  for (;;) {
+    ret = read (fileno (stdin), buf, size);
+    if (ret == 0) return EXIT_SUCCESS;
+    if (ret == -1) return EXIT_FAILURE;
+    ret = write_all (emacs_socket, buf, ret);
+    if (ret == -1) return EXIT_FAILURE;
+  }
+}
+
 int
 main (int argc, char **argv)
 {
@@ -1918,6 +1947,20 @@ main (int argc, char **argv)
 	      kill (0, SIGSTOP);
 	    }
 #endif
+	  else if (strprefix ("-proxy-stdio ", p))
+            {
+	      /* -proxy-stdio: Begin proxying stdio */
+	      /* All further data sent to us by Emacs (including the
+	       * rest of this message), we should write out verbatim
+	       * to stdout. */
+	      /* And we should start reading stdin and sending it
+	       * verbatim to Emacs. */
+	      if (write_all (fileno(stdout), end_p, (string + rl) - end_p) != 0)
+		return EXIT_FAILURE;
+	      /* We'll do this forever and do nothing else. */
+	      return start_proxying(string, sizeof(string));
+            }
+
 	  else
 	    {
 	      /* Unknown command. */

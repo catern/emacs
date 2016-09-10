@@ -1279,9 +1279,11 @@ client.")
   (with-local-quit
     (condition-case err
         (let ((buffers (server-visit-files files proc nowait))
-              (server-emacsclient-proc proc))
+              (server-emacsclient-proc proc)
+              pager-func)
           (mapc 'funcall (nreverse commands))
 
+          (setq pager-func (process-get proc 'server-client-pager-func))
 	  ;; If we were told only to open a new client, obey
 	  ;; `initial-buffer-choice' if it specifies a file
           ;; or a function.
@@ -1301,10 +1303,17 @@ client.")
             ;; Client requested nowait; return immediately.
             (server-log "Close nowait client" proc)
             (server-delete-client proc))
-           ((and (not dontkill) (null buffers))
+           ((and (not dontkill) (null buffers) (not pager-func))
             ;; This client is empty; get rid of it immediately.
             (server-log "Close empty client" proc)
-            (server-delete-client proc)))
+            (server-delete-client proc))
+           ((and (not dontkill) (null buffers) pager-func)
+            ;; We've been instructed to turn this emacsclient into a pager
+            ;; this passes it outside the control of server.el, so for us it's like killing it
+            (server-send-string proc "-proxy-stdio \n")
+            ;; pager-func should set up a new process-filter and return promptly
+            (funcall pager-func proc)
+            (setq server-clients (delq proc server-clients))))
           (cond
            ((or isearch-mode (minibufferp))
             nil)
@@ -1323,6 +1332,24 @@ client.")
        (when (eq (car err) 'quit)
          (message "Quit emacsclient request"))
        (server-return-error proc err)))))
+
+(defun server-pager ()
+  "Create a buffer holding the stdin of the current client.
+This function will create a buffer *pager* which will receive
+input from the stdin of the current emacsclient.
+
+This function should only be run by passing --eval to emacsclient,
+like so:
+   echo some data | emacsclient --eval '(server-pager)'"
+  (when (null server-emacsclient-proc)
+    (error "Cannot be run out of emacsclient --eval context"))
+  (process-put server-emacsclient-proc 'server-client-pager-func
+               (lambda (proc)
+                 (let ((buffer (generate-new-buffer "*pager*")))
+                   (set-process-buffer proc buffer)
+                   (set-process-filter proc nil)
+                   (pop-to-buffer buffer))))
+  nil)
 
 (defun server-return-error (proc err)
   (ignore-errors
