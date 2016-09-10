@@ -1262,6 +1262,12 @@ The following commands are accepted by the client:
     ;; condition-case
     (error (server-return-error proc err))))
 
+(defvar server-emacsclient-proc nil
+  "Non-nil if running commands for a client of the server.
+If we are currently evaluating Lisp in response to client commands,
+this variable contains the process for communicating with that
+client.")
+
 (defun server-execute (proc files nowait commands dontkill frame tty-name)
   ;; This is run from timers and process-filters, i.e. "asynchronously".
   ;; But w.r.t the user, this is not really asynchronous since the timer
@@ -1272,7 +1278,8 @@ The following commands are accepted by the client:
   ;; including code that needs to wait.
   (with-local-quit
     (condition-case err
-        (let ((buffers (server-visit-files files proc nowait)))
+        (let ((buffers (server-visit-files files proc nowait))
+              (server-emacsclient-proc proc))
           (mapc 'funcall (nreverse commands))
 
 	  ;; If we were told only to open a new client, obey
