@@ -455,9 +455,25 @@ message (bool is_error, const char *format, ...)
   va_end (args);
 }
 
+/* Display a normal or error message, always on the terminal. */
+static void term_message (bool, const char *, ...) ATTRIBUTE_FORMAT_PRINTF (2, 3);
+static void
+term_message (bool is_error, const char *format, ...)
+{
+  va_list args;
+
+  va_start (args, format);
+
+  FILE *f = is_error ? stderr : stdout;
+
+  vfprintf (f, format, args);
+  fflush (f);
+
+  va_end (args);
+}
+
 /* Decode the options from argv and argc.
    The global variable `optind' will say how many arguments we used up.  */
-
 static void
 decode_options (int argc, char **argv)
 {
@@ -1502,7 +1518,7 @@ start_daemon_and_retry_set_socket (void)
     }
   else if (dpid < 0)
     {
-      fprintf (stderr, "Error: Cannot fork!\n");
+      term_message (true, "Error: Cannot fork!\n");
       exit (EXIT_FAILURE);
     }
   else
@@ -1802,7 +1818,7 @@ main (int argc, char **argv)
   /* Wait for an answer. */
   if (!eval && !tty && !nowait && !quiet)
     {
-      printf ("Waiting for Emacs...");
+      term_message (false, "Waiting for Emacs...");
       needlf = 2;
     }
   fflush (stdout);
@@ -1862,8 +1878,8 @@ main (int argc, char **argv)
               /* -print STRING: Print STRING on the terminal. */
               str = unquote_argument (p + strlen ("-print "));
               if (needlf)
-                printf ("\n");
-              printf ("%s", str);
+                term_message (false, "\n");
+              term_message (false, "%s", str);
               needlf = str[0] == '\0' ? needlf : str[strlen (str) - 1] != '\n';
             }
           else if (strprefix ("-print-nonl ", p))
@@ -1871,7 +1887,7 @@ main (int argc, char **argv)
               /* -print-nonl STRING: Print STRING on the terminal.
                  Used to continue a preceding -print command.  */
               str = unquote_argument (p + strlen ("-print-nonl "));
-              printf ("%s", str);
+              term_message (false, "%s", str);
               needlf = str[0] == '\0' ? needlf : str[strlen (str) - 1] != '\n';
             }
           else if (strprefix ("-error ", p))
@@ -1879,8 +1895,8 @@ main (int argc, char **argv)
               /* -error DESCRIPTION: Signal an error on the terminal. */
               str = unquote_argument (p + strlen ("-error "));
               if (needlf)
-                printf ("\n");
-              fprintf (stderr, "*ERROR*: %s", str);
+                term_message (false, "\n");
+              term_message (true, "*ERROR*: %s", str);
               needlf = str[0] == '\0' ? needlf : str[strlen (str) - 1] != '\n';
               exit_status = EXIT_FAILURE;
             }
@@ -1889,7 +1905,7 @@ main (int argc, char **argv)
 	    {
 	      /* -suspend: Suspend this terminal, i.e., stop the process. */
 	      if (needlf)
-		printf ("\n");
+		term_message (false, "\n");
 	      needlf = 0;
 	      kill (0, SIGSTOP);
 	    }
@@ -1898,15 +1914,15 @@ main (int argc, char **argv)
 	    {
 	      /* Unknown command. */
 	      if (needlf)
-		printf ("\n");
+		term_message (false, "\n");
 	      needlf = 0;
-	      printf ("*ERROR*: Unknown message: %s\n", p);
+	      term_message (true, "*ERROR*: Unknown message: %s\n", p);
 	    }
 	}
     }
 
   if (needlf)
-    printf ("\n");
+    term_message (false, "\n");
   fflush (stdout);
   while (fdatasync (1) != 0 && errno == EINTR)
     continue;
