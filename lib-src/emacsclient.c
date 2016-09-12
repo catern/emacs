@@ -19,7 +19,6 @@ along with GNU Emacs.  If not, see <http://www.gnu.org/licenses/>.  */
 
 
 #include <config.h>
-
 #ifdef WINDOWSNT
 
 /* ms-w32.h defines these, which disables sockets altogether!  */
@@ -76,6 +75,8 @@ char *w32_getenv (const char *);
 #include <stdio.h>
 #include <getopt.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <err.h>
 
 #include <pwd.h>
 #include <sys/stat.h>
@@ -1622,32 +1623,77 @@ start_daemon_and_retry_set_socket (void)
 #endif	/* WINDOWSNT */
 }
 
-int write_all (int fd, char *buf, size_t size);
-int
-write_all (int fd, char *buf, size_t size)
+void start_proxying (char *initial_buf, size_t size) __attribute__ ((noreturn));
+void
+start_proxying (char *initial_buf, size_t size)
 {
-  int ret;
-  while (size > 0) {
-    ret = write (fd, buf, size);
-    if (ret == -1) return -1;
-    size -= ret;
+  void set_nonblock(int fd) {
+    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
   }
-  return 0;
-}
+  set_nonblock(fileno(stdin));
+  set_nonblock(emacs_socket);
+  set_nonblock(fileno(stdout));
 
-int start_proxying (char *buf, size_t size);
-int
-start_proxying (char *buf, size_t size)
-{
   int ret;
+  struct proxy {
+    char buf[BUFSIZ];
+    size_t datai;
+    size_t datasize;
+    int readfd;
+    int writefd;
+    char shutdown;
+  };
+  struct proxy in = { .readfd = fileno(stdin), .writefd = emacs_socket };
+  struct proxy out = { .readfd = emacs_socket, .writefd = fileno(stdout) };
+  memcpy(out.buf, initial_buf, size);
+  out.datasize = size;
 
-  /* not actually proxying output from emacs to our stdout yet */
+  fd_set readset;
+  fd_set writeset;
+
+  void prepare_sets(struct proxy *x) {
+    if (x->shutdown) return;
+    if (x->datasize == 0) {
+      x->datai = 0;
+      FD_SET(x->readfd, &readset);
+    } else if (x->datasize != 0) {
+      FD_SET(x->writefd, &writeset);
+    }
+  }
+  void process(struct proxy *x) {
+    if (FD_ISSET(x->readfd, &readset)) {
+      x->datai = 0;
+      ret = read(x->readfd, x->buf, sizeof(x->buf));
+      if (ret == -1) err(1, "%s:%d:read", __FUNCTION__, __LINE__);
+      x->datasize = ret;
+      /* EOF, can't proxy any more */
+      if (ret == 0) x->shutdown = 1;
+    } else if (FD_ISSET(x->writefd, &writeset)) {
+      ret = write(x->writefd, &x->buf[x->datai], x->datasize);
+      if (ret == -1) err(1, "%s:%d:write", __FUNCTION__, __LINE__);
+      x->datai += ret;
+      x->datasize -= ret;
+    }
+  }
   for (;;) {
-    ret = read (fileno (stdin), buf, size);
-    if (ret == 0) return EXIT_SUCCESS;
-    if (ret == -1) return EXIT_FAILURE;
-    ret = write_all (emacs_socket, buf, ret);
-    if (ret == -1) return EXIT_FAILURE;
+    FD_ZERO(&readset);
+    FD_ZERO(&writeset);
+    prepare_sets(&in);
+    prepare_sets(&out);
+    select(emacs_socket + 1, &readset, &writeset, NULL, NULL);
+    if (ret == -1) err(1, "%s:%d:select", __FUNCTION__, __LINE__);
+    process(&in);
+    process(&out);
+    /* can't do this generically, need to know which ones are sockets */
+    if (in.shutdown) {
+      close(fileno(stdin));
+      shutdown(emacs_socket, SHUT_WR);
+    }
+    if (out.shutdown) {
+      shutdown(emacs_socket, SHUT_RD);
+      close(fileno(stdout));
+    }
+    if (in.shutdown && out.shutdown) exit(0);
   }
 }
 
@@ -1955,10 +2001,9 @@ main (int argc, char **argv)
 	       * to stdout. */
 	      /* And we should start reading stdin and sending it
 	       * verbatim to Emacs. */
-	      if (write_all (fileno(stdout), end_p, (string + rl) - end_p) != 0)
-		return EXIT_FAILURE;
 	      /* We'll do this forever and do nothing else. */
-	      return start_proxying(string, sizeof(string));
+	      /* (We do have to pass in any data we already read) */
+	      start_proxying(end_p, (string + rl) - end_p);
             }
 
 	  else
