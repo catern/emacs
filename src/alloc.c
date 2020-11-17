@@ -6125,10 +6125,19 @@ garbage_collect (void)
   /* Accumulate statistics.  */
   if (FLOATP (Vgc_elapsed))
     {
+      const struct timespec this_gc_elapsed =
+        timespec_sub (current_timespec (), start);
       static struct timespec gc_elapsed;
-      gc_elapsed = timespec_add (gc_elapsed,
-				 timespec_sub (current_timespec (), start));
+      gc_elapsed = timespec_add (gc_elapsed, this_gc_elapsed);
       Vgc_elapsed = make_float (timespectod (gc_elapsed));
+      static double gc_time_ema;
+      if (gc_time_ema == 0.0)
+        /* Initialize exponential moving average to first GC time. */
+        gc_time_ema = timespectod (this_gc_elapsed);
+      else
+        /* Decay very fast, since heap size can change rapidly. */
+        gc_time_ema = 0.5 * gc_time_ema + 0.5 * timespectod (this_gc_elapsed);
+      Vgc_estimated_time = make_float (gc_time_ema);
     }
 
   gcs_done++;
@@ -7531,6 +7540,11 @@ do hash-consing of the objects allocated to pure space.  */);
 The time is in seconds as a floating point value.  */);
   DEFVAR_INT ("gcs-done", gcs_done,
               doc: /* Accumulated number of garbage collections done.  */);
+  DEFVAR_LISP ("gc-estimated-time", Vgc_estimated_time,
+	       doc: /* An estimate of the time required for the next garbage collection.
+The time is in seconds as a floating point value.
+This is calculated as an exponential moving average of the time
+required for previous garbage collections.  */);
 
   DEFVAR_INT ("integer-width", integer_width,
 	      doc: /* Maximum number N of bits in safely-calculated integers.
