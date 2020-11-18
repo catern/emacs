@@ -5961,6 +5961,23 @@ maybe_garbage_collect (void)
     garbage_collect ();
 }
 
+/* Like maybe_garbage_collect, but with the GC threshold reduced by
+   FACTOR, so that we'll GC sooner than we would otherwise.
+   Returns true if we GC'd.  */
+bool
+maybe_garbage_collect_eagerly (EMACS_INT factor)
+{
+  bump_consing_until_gc (gc_cons_threshold, Vgc_cons_percentage);
+  EMACS_INT since_gc = gc_threshold - consing_until_gc;
+  if (factor >= 1 && since_gc > gc_threshold / factor)
+    {
+      garbage_collect ();
+      return true;
+    }
+  else
+    return false;
+}
+
 /* Subroutine of Fgarbage_collect that does most of the work.  */
 void
 garbage_collect (void)
@@ -6216,6 +6233,25 @@ For further details, see Info node `(elisp)Garbage Collection'.  */)
 #endif
   };
   return CALLMANY (Flist, total);
+}
+
+DEFUN ("garbage-collect-maybe", Fgarbage_collect_maybe,
+Sgarbage_collect_maybe, 1, 1, "",
+       doc: /* Call `garbage-collect' if enough allocation happened.
+FACTOR determines what "enough" means here:
+If FACTOR is a positive number N, it means to run GC if more than
+1/Nth of the allocations needed to triger automatic allocation took
+place.
+Therefore, as N gets higher, this is more likely to perform a GC.
+Returns t if GC happened, and nil otherwise.  */)
+  (Lisp_Object factor)
+{
+  CHECK_FIXNAT (factor);
+  EMACS_INT fact = XFIXNAT (factor);
+  if (maybe_garbage_collect_eagerly (fact))
+    return Qt;
+  else
+    return Qnil;
 }
 
 /* Mark Lisp objects in glyph matrix MATRIX.  Currently the
@@ -7567,6 +7603,7 @@ N should be nonnegative.  */);
   defsubr (&Smake_finalizer);
   defsubr (&Spurecopy);
   defsubr (&Sgarbage_collect);
+  defsubr (&Sgarbage_collect_maybe);
   defsubr (&Smemory_info);
   defsubr (&Smemory_use_counts);
 #ifdef GNU_LINUX
