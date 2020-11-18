@@ -1008,6 +1008,53 @@ the `--debug-init' option to view a complete error backtrace."
     (when debug-on-error-should-be-set
       (setq debug-on-error debug-on-error-from-init-file))))
 
+(defcustom gc-opportunistic-eager-factor 2
+  "Factor to use for `garbage-collect-maybe' with opportunistic GC.
+This should be a positive integer or nil.
+If non-nil, Emacs will call `garbage-collect-maybe' with this
+argument as part of opportunistic GC triggered by
+`gc-start-opportunistic'.
+If this is nil, `gc-start-opportunistic' will do nothing."
+  :type 'integer
+  :version "28.1")
+
+(defvar gc-opportunistic-performed 0
+  "The number of opportunistic GCs we have actually performed.
+This is incremented by `gc-start-opportunistic', if and when it
+actually does a GC.")
+
+(defvar gc-next-opportunistic-timer nil
+  "The timer for the next opportunistic GC.
+This is set by `gc-start-opportunistic'.")
+
+(defun gc-start-opportunistic ()
+  "Start an opportunistic GC which may run at some point in the future.
+
+This function may perform a single GC at some point while Emacs
+is idle, with the goal of improving interactive performance by
+avoiding GC while the user is actively interacting with Emacs.
+
+The higher `gc-opportunistic-eager-factor' is, the more likely
+this function is to actually perform a GC.  Note that increasing
+this variable can worsen performance by performing excessive GCs.
+If `gc-opportunistic-eager-factor' is nil, this function will do
+nothing.
+
+If `gc-opportunistic-eager-factor' is non-nil at Emacs startup,
+this function will be run by an idle timer.  Such a timer can
+also be started after Emacs startup with `run-with-idle-timer'."
+  (when gc-opportunistic-eager-factor
+    (when gc-next-opportunistic-timer
+      (cancel-timer gc-next-opportunistic-timer))
+    (setq gc-next-opportunistic-timer
+          (run-with-idle-timer
+           gc-estimated-time nil
+           (lambda ()
+             (if (garbage-collect-maybe gc-opportunistic-eager-factor)
+                 (setq gc-opportunistic-performed
+                       (1+ gc-opportunistic-performed))))
+           ))))
+
 (defun command-line ()
   "A subroutine of `normal-top-level'.
 Amongst another things, it parses the command-line arguments."
@@ -1419,6 +1466,15 @@ please check its value")
     (unless (and (eq scalable-fonts-allowed old-scalable-fonts-allowed)
 		 (eq face-ignored-fonts old-face-ignored-fonts))
       (clear-face-cache)))
+
+  ;; Start opportunistic GC (after loading the init file, so we obey
+  ;; its settings).  This is desirable for two reason:
+  ;; - It reduces the number of times we have to GC in the middle of
+  ;;   an operation.
+  ;; - It means we GC when the C stack is short, reducing the risk of false
+  ;;   positives from the conservative stack scanning.
+  (when gc-opportunistic-eager-factor
+    (run-with-idle-timer 1 t #'gc-start-opportunistic))
 
   (setq after-init-time (current-time))
   ;; Display any accumulated warnings after all functions in
