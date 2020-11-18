@@ -7117,9 +7117,8 @@ the return value is nil.  Otherwise the value is t.  */)
 	 Do not record the buffer here.  We do that in a separate call
 	 to select_window below.  See also Bug#16207.  */
       select_window (data->current_window, Qt, true);
-      BVAR (XBUFFER (XWINDOW (selected_window)->contents),
-	    last_selected_window)
-	= selected_window;
+      bset_last_selected_window (XBUFFER (XWINDOW (selected_window)->contents),
+                                 selected_window);
 
       if (NILP (data->focus_frame)
 	  || (FRAMEP (data->focus_frame)

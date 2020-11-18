@@ -327,11 +327,6 @@ bset_right_fringe_width (struct buffer *b, Lisp_Object val)
   b->right_fringe_width_ = val;
 }
 static void
-bset_save_length (struct buffer *b, Lisp_Object val)
-{
-  b->save_length_ = val;
-}
-static void
 bset_scroll_bar_width (struct buffer *b, Lisp_Object val)
 {
   b->scroll_bar_width_ = val;
@@ -951,7 +946,7 @@ reset_buffer (register struct buffer *b)
   bset_directory (b, current_buffer ? BVAR (current_buffer, directory) : Qnil);
   b->modtime = make_timespec (0, UNKNOWN_MODTIME_NSECS);
   b->modtime_size = -1;
-  XSETFASTINT (BVAR (b, save_length), 0);
+  bset_save_length (b, make_fixed_natnum (0));
   b->last_window_start = 1;
   /* It is more conservative to start out "changed" than "unchanged".  */
   b->clip_changed = 0;
@@ -2275,7 +2270,7 @@ so the buffer is truly empty after this.  */)
   /* Prevent warnings, or suspension of auto saving, that would happen
      if future size is less than past size.  Use of erase-buffer
      implies that the future text is not really related to the past text.  */
-  XSETFASTINT (BVAR (current_buffer, save_length), 0);
+  bset_save_length (current_buffer, make_fixed_natnum (0));
   return Qnil;
 }
 
@@ -2763,8 +2758,8 @@ current buffer is cleared.  */)
       struct buffer *o = XBUFFER (other);
       if (o->base_buffer == current_buffer && BUFFER_LIVE_P (o))
 	{
-	  BVAR (o, enable_multibyte_characters)
-	    = BVAR (current_buffer, enable_multibyte_characters);
+	  bset_enable_multibyte_characters (o,
+            BVAR (current_buffer, enable_multibyte_characters));
 	  o->prevent_redisplay_optimizations_p = true;
 	}
     }

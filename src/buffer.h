@@ -824,6 +824,11 @@ bset_width_table (struct buffer *b, Lisp_Object val)
 {
   b->width_table_ = val;
 }
+INLINE void
+bset_save_length (struct buffer *b, Lisp_Object val)
+{
+  b->save_length_ = val;
+}
 
 /* BUFFER_CEILING_OF (resp. BUFFER_FLOOR_OF), when applied to n, return
    the max (resp. min) p such that
