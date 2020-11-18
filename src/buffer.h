@@ -284,6 +284,9 @@ struct buffer_text
 
 #define BVAR(buf, field) ((buf)->field ## _)
 
+/* Access a BVAR from buffer_defaults */
+#define BVAR_DEFAULT(field) (buffer_defaults.field ## _)
+
 /* Max number of builtin per-buffer variables.  */
 enum { MAX_PER_BUFFER_VARS = 50 };
 
