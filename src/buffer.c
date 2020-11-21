@@ -984,7 +984,7 @@ reset_buffer (register struct buffer *b)
 static void
 reset_buffer_local_variables (struct buffer *b, bool permanent_too)
 {
-  int offset, i;
+  int offset;
 
   /* Reset the major mode to Fundamental, together with all the
      things that depend on the major mode.
@@ -1078,10 +1078,6 @@ reset_buffer_local_variables (struct buffer *b, bool permanent_too)
         }
     }
 
-  for (i = 0; i < last_per_buffer_idx; ++i)
-    if (permanent_too || buffer_permanent_local_flags[i] == 0)
-      SET_PER_BUFFER_VALUE_P (b, i, 0);
-
   /* For each slot that has a default value, copy that into the slot.  */
   FOR_EACH_PER_BUFFER_OBJECT_AT (offset)
     {
@@ -1089,7 +1085,10 @@ reset_buffer_local_variables (struct buffer *b, bool permanent_too)
       if ((idx > 0
 	   && (permanent_too
 	       || buffer_permanent_local_flags[idx] == 0)))
-	set_per_buffer_value (b, offset, per_buffer_default (offset));
+        {
+          SET_PER_BUFFER_VALUE_P (b, idx, 0);
+          set_per_buffer_value (b, offset, per_buffer_default (offset));
+        }
     }
 }
 
