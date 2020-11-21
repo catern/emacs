@@ -1486,6 +1486,16 @@ set_per_buffer_value (struct buffer *b, int offset, Lisp_Object value)
   *(Lisp_Object *)(offset + (char *) b) = value;
 }
 
+/* Value is true if the variable with offset OFFSET has a default
+   value; false if the variable has no default, and is therefore
+   always local. */
+
+INLINE bool
+BUFFER_DEFAULT_VALUE_P (int offset)
+{
+  return PER_BUFFER_IDX (offset) > 0;
+}
+
 /* Value is true if the variable with offset OFFSET has a local value
    in buffer B.  */
 

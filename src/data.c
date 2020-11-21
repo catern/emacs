@@ -1720,13 +1720,12 @@ set_default_internal (Lisp_Object symbol, Lisp_Object value,
 	if (BUFFER_OBJFWDP (valcontents))
 	  {
 	    int offset = XBUFFER_OBJFWD (valcontents)->offset;
-	    int idx = PER_BUFFER_IDX (offset);
 
 	    set_per_buffer_default (offset, value);
 
 	    /* If this variable is not always local in all buffers,
 	       set it in the buffers that don't nominally have a local value.  */
-	    if (idx > 0)
+	    if (BUFFER_DEFAULT_VALUE_P (offset))
 	      {
 		Lisp_Object buf, tail;
 
@@ -1996,7 +1995,7 @@ From now on the default value will apply in this buffer.  Return VARIABLE.  */)
 	    int offset = XBUFFER_OBJFWD (valcontents)->offset;
 	    int idx = PER_BUFFER_IDX (offset);
 
-	    if (idx > 0)
+	    if (BUFFER_DEFAULT_VALUE_P (offset))
 	      {
 		SET_PER_BUFFER_VALUE_P (current_buffer, idx, 0);
 		set_per_buffer_value (current_buffer, offset,
