@@ -94,10 +94,6 @@ struct buffer buffer_local_symbols;
   ((ptrdiff_t) min (MOST_POSITIVE_FIXNUM,				\
 		    min (PTRDIFF_MAX, SIZE_MAX) / word_size))
 
-/* Flags indicating which built-in buffer-local variables
-   are permanent locals.  */
-static char buffer_permanent_local_flags[MAX_PER_BUFFER_VARS];
-
 /* Number of per-buffer variables used.  */
 
 static int last_per_buffer_idx;
@@ -1081,10 +1077,14 @@ reset_buffer_local_variables (struct buffer *b, bool permanent_too)
   /* For each slot that has a default value, copy that into the slot.  */
   FOR_EACH_PER_BUFFER_OBJECT_AT (offset)
     {
-      int idx = PER_BUFFER_IDX (offset);
       if ((BUFFER_DEFAULT_VALUE_P (offset)
-	   && (permanent_too
-	       || buffer_permanent_local_flags[idx] == 0)))
+           && (permanent_too
+               /* Special case these two for backwards-compat; they're
+                  flagged as permanent-locals in bindings.el, even
+                  though they do have default values. */
+               || (offset != PER_BUFFER_VAR_OFFSET (truncate_lines)
+                   && offset !=
+                   PER_BUFFER_VAR_OFFSET (buffer_file_coding_system)))))
         KILL_PER_BUFFER_VALUE (b, offset);
     }
 }
@@ -5119,18 +5119,12 @@ init_buffer_once (void)
 
      buffer_defaults: default values of buffer-locals
      buffer_local_flags: metadata
-     buffer_permanent_local_flags: metadata
      buffer_local_symbols: metadata
 
      There must be a simpler way to store the metadata.
   */
 
   int idx;
-
-  /* Items flagged permanent get an explicit permanent-local property
-     added in bindings.el, for clarity.  */
-  PDUMPER_REMEMBER_SCALAR (buffer_permanent_local_flags);
-  memset (buffer_permanent_local_flags, 0, sizeof buffer_permanent_local_flags);
 
   /* 0 means not a lisp var, -1 means always local, else mask.  */
   memset (&buffer_local_flags, 0, sizeof buffer_local_flags);
@@ -5178,9 +5172,7 @@ init_buffer_once (void)
   XSETFASTINT (BVAR (&buffer_local_flags, selective_display), idx); ++idx;
   XSETFASTINT (BVAR (&buffer_local_flags, selective_display_ellipses), idx); ++idx;
   XSETFASTINT (BVAR (&buffer_local_flags, tab_width), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, truncate_lines), idx);
-  /* Make this one a permanent local.  */
-  buffer_permanent_local_flags[idx++] = 1;
+  XSETFASTINT (BVAR (&buffer_local_flags, truncate_lines), idx); ++idx;
   XSETFASTINT (BVAR (&buffer_local_flags, word_wrap), idx); ++idx;
   XSETFASTINT (BVAR (&buffer_local_flags, ctl_arrow), idx); ++idx;
   XSETFASTINT (BVAR (&buffer_local_flags, fill_column), idx); ++idx;
@@ -5194,9 +5186,7 @@ init_buffer_once (void)
   XSETFASTINT (BVAR (&buffer_local_flags, bidi_paragraph_direction), idx); ++idx;
   XSETFASTINT (BVAR (&buffer_local_flags, bidi_paragraph_separate_re), idx); ++idx;
   XSETFASTINT (BVAR (&buffer_local_flags, bidi_paragraph_start_re), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, buffer_file_coding_system), idx);
-  /* Make this one a permanent local.  */
-  buffer_permanent_local_flags[idx++] = 1;
+  XSETFASTINT (BVAR (&buffer_local_flags, buffer_file_coding_system), idx); ++idx;
   XSETFASTINT (BVAR (&buffer_local_flags, left_margin_cols), idx); ++idx;
   XSETFASTINT (BVAR (&buffer_local_flags, right_margin_cols), idx); ++idx;
   XSETFASTINT (BVAR (&buffer_local_flags, left_fringe_width), idx); ++idx;

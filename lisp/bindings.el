@@ -771,7 +771,8 @@ okay.  See `mode-line-format'.")
 ;; `kill-all-local-variables', because they have no default value.
 ;; For consistency, we give them the `permanent-local' property, even
 ;; though `kill-all-local-variables' does not actually consult it.
-;; See init_buffer_once in buffer.c for the origins of this list.
+;; See init_buffer_once and reset_buffer_local_variables in buffer.c
+;; for the origins of this list.
 
 (mapc (lambda (sym) (put sym 'permanent-local t))
       '(buffer-file-name default-directory buffer-backed-up
