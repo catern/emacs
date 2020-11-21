@@ -1626,8 +1626,8 @@ default_value (Lisp_Object symbol)
 	if (BUFFER_OBJFWDP (valcontents))
 	  {
 	    int offset = XBUFFER_OBJFWD (valcontents)->offset;
-	    if (PER_BUFFER_IDX (offset) != 0)
-	      return per_buffer_default (offset);
+	    eassert (PER_BUFFER_IDX (offset) != 0);
+            return per_buffer_default (offset);
 	  }
 
 	/* For other variables, get the current value.  */
