@@ -971,8 +971,7 @@ reset_buffer (register struct buffer *b)
   bset_last_selected_window (b, Qnil);
   bset_display_count (b, make_fixnum (0));
   bset_display_time (b, Qnil);
-  bset_enable_multibyte_characters
-    (b, BVAR (&buffer_defaults, enable_multibyte_characters));
+  bset_enable_multibyte_characters (b, Qt);
   bset_cursor_type (b, BVAR (&buffer_defaults, cursor_type));
   bset_extra_line_spacing (b, BVAR (&buffer_defaults, extra_line_spacing));
 
@@ -5397,8 +5396,6 @@ init_buffer (void)
 
   AUTO_STRING (scratch, "*scratch*");
   Fset_buffer (Fget_buffer_create (scratch));
-  if (NILP (BVAR (&buffer_defaults, enable_multibyte_characters)))
-    Fset_buffer_multibyte (Qnil);
 
   char const *pwd = emacs_wd;
 
