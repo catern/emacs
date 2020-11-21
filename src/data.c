@@ -1123,7 +1123,7 @@ store_symval_forwarding (lispfwd valcontents, Lisp_Object newval,
 	    {
 	      struct buffer *b = XBUFFER (buf);
 
-	      if (! PER_BUFFER_VALUE_P (b, idx))
+	      if (! PER_BUFFER_VALUE_P (b, offset))
 		set_per_buffer_value (b, offset, newval);
 	    }
 	}
@@ -1440,8 +1440,8 @@ set_internal (Lisp_Object symbol, Lisp_Object newval, Lisp_Object where,
 	  {
 	    int offset = XBUFFER_OBJFWD (innercontents)->offset;
 	    int idx = PER_BUFFER_IDX (offset);
-	    if (idx > 0 && bindflag == SET_INTERNAL_SET
-	        && !PER_BUFFER_VALUE_P (buf, idx))
+	    if (bindflag == SET_INTERNAL_SET
+	        && !PER_BUFFER_VALUE_P (buf, offset))
 	      {
 		if (let_shadows_buffer_binding_p (sym))
 		  set_default_internal (symbol, newval, bindflag);
@@ -1740,7 +1740,7 @@ set_default_internal (Lisp_Object symbol, Lisp_Object value,
 		  {
 		    struct buffer *b = XBUFFER (buf);
 
-		    if (!PER_BUFFER_VALUE_P (b, idx))
+		    if (!PER_BUFFER_VALUE_P (b, offset))
 		      set_per_buffer_value (b, offset, value);
 		  }
 	      }
@@ -2077,8 +2077,7 @@ BUFFER defaults to the current buffer.  */)
 	if (BUFFER_OBJFWDP (valcontents))
 	  {
 	    int offset = XBUFFER_OBJFWD (valcontents)->offset;
-	    int idx = PER_BUFFER_IDX (offset);
-	    if (idx == -1 || PER_BUFFER_VALUE_P (buf, idx))
+	    if (PER_BUFFER_VALUE_P (buf, offset))
 	      return Qt;
 	  }
 	return Qnil;

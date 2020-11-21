@@ -1297,8 +1297,7 @@ buffer_lisp_local_variables (struct buffer *buf, bool clone)
 static Lisp_Object
 buffer_local_variables_1 (struct buffer *buf, int offset, Lisp_Object sym)
 {
-  int idx = PER_BUFFER_IDX (offset);
-  if ((idx == -1 || PER_BUFFER_VALUE_P (buf, idx))
+  if (PER_BUFFER_VALUE_P (buf, offset)
       && SYMBOLP (PER_BUFFER_SYMBOL (offset)))
     {
       sym = NILP (sym) ? PER_BUFFER_SYMBOL (offset) : sym;

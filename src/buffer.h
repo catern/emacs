@@ -1420,16 +1420,6 @@ OVERLAY_POSITION (Lisp_Object p)
 
 extern bool valid_per_buffer_idx (int);
 
-/* Value is true if the variable with index IDX has a local value
-   in buffer B.  */
-
-INLINE bool
-PER_BUFFER_VALUE_P (struct buffer *b, int idx)
-{
-  eassert (valid_per_buffer_idx (idx));
-  return b->local_flags[idx];
-}
-
 /* Set whether per-buffer variable with index IDX has a buffer-local
    value in buffer B.  VAL zero means it hasn't.  */
 
@@ -1494,6 +1484,17 @@ INLINE void
 set_per_buffer_value (struct buffer *b, int offset, Lisp_Object value)
 {
   *(Lisp_Object *)(offset + (char *) b) = value;
+}
+
+/* Value is true if the variable with offset OFFSET has a local value
+   in buffer B.  */
+
+INLINE bool
+PER_BUFFER_VALUE_P (struct buffer *b, int offset)
+{
+  int idx = PER_BUFFER_IDX (offset);
+  eassert (idx == -1 || valid_per_buffer_idx (idx));
+  return idx == -1 || b->local_flags[idx];
 }
 
 /* Downcase a character C, or make no change if that cannot be done.  */
