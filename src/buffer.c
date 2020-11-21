@@ -1297,8 +1297,7 @@ buffer_local_variables_1 (struct buffer *buf, int offset, Lisp_Object sym)
       && SYMBOLP (PER_BUFFER_SYMBOL (offset)))
     {
       sym = NILP (sym) ? PER_BUFFER_SYMBOL (offset) : sym;
-      Lisp_Object val = per_buffer_value (buf, offset);
-      return EQ (val, Qunbound) ? sym : Fcons (sym, val);
+      return Fcons (sym, per_buffer_value (buf, offset));
     }
   return Qnil;
 }
