@@ -1507,6 +1507,16 @@ PER_BUFFER_VALUE_P (struct buffer *b, int offset)
   return idx == -1 || b->local_flags[idx];
 }
 
+/* Kill the per-buffer binding for this value, if there is one. */
+
+INLINE void
+KILL_PER_BUFFER_VALUE (struct buffer *b, int offset)
+{
+  int idx = PER_BUFFER_IDX (offset);
+  SET_PER_BUFFER_VALUE_P (b, idx, 0);
+  set_per_buffer_value (b, offset, per_buffer_default (offset));
+}
+
 /* Downcase a character C, or make no change if that cannot be done.  */
 INLINE int
 downcase (int c)

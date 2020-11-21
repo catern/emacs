@@ -1993,14 +1993,8 @@ From now on the default value will apply in this buffer.  Return VARIABLE.  */)
 	if (BUFFER_OBJFWDP (valcontents))
 	  {
 	    int offset = XBUFFER_OBJFWD (valcontents)->offset;
-	    int idx = PER_BUFFER_IDX (offset);
-
 	    if (BUFFER_DEFAULT_VALUE_P (offset))
-	      {
-		SET_PER_BUFFER_VALUE_P (current_buffer, idx, 0);
-		set_per_buffer_value (current_buffer, offset,
-				      per_buffer_default (offset));
-	      }
+              KILL_PER_BUFFER_VALUE (current_buffer, offset);
 	  }
 	return variable;
       }

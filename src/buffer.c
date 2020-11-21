@@ -1085,10 +1085,7 @@ reset_buffer_local_variables (struct buffer *b, bool permanent_too)
       if ((BUFFER_DEFAULT_VALUE_P (offset)
 	   && (permanent_too
 	       || buffer_permanent_local_flags[idx] == 0)))
-        {
-          SET_PER_BUFFER_VALUE_P (b, idx, 0);
-          set_per_buffer_value (b, offset, per_buffer_default (offset));
-        }
+        KILL_PER_BUFFER_VALUE (b, offset);
     }
 }
 
