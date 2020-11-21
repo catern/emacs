@@ -1163,6 +1163,9 @@ store_symval_forwarding (lispfwd valcontents, Lisp_Object newval,
 	if (buf == NULL)
 	  buf = current_buffer;
 	set_per_buffer_value (buf, offset, newval);
+        int idx = PER_BUFFER_IDX (offset);
+        if (idx > 0)
+          SET_PER_BUFFER_VALUE_P (buf, idx, 1);
       }
       break;
 
@@ -1436,17 +1439,16 @@ set_internal (Lisp_Object symbol, Lisp_Object newval, Lisp_Object where,
 	struct buffer *buf
 	  = BUFFERP (where) ? XBUFFER (where) : current_buffer;
 	lispfwd innercontents = SYMBOL_FWD (sym);
+        bool should_store = true;
 	if (BUFFER_OBJFWDP (innercontents))
 	  {
 	    int offset = XBUFFER_OBJFWD (innercontents)->offset;
-	    int idx = PER_BUFFER_IDX (offset);
 	    if (bindflag == SET_INTERNAL_SET
-	        && !PER_BUFFER_VALUE_P (buf, offset))
+	        && !PER_BUFFER_VALUE_P (buf, offset)
+                && let_shadows_buffer_binding_p (sym))
 	      {
-		if (let_shadows_buffer_binding_p (sym))
-		  set_default_internal (symbol, newval, bindflag);
-		else
-		  SET_PER_BUFFER_VALUE_P (buf, idx, 1);
+                set_default_internal (symbol, newval, bindflag);
+		should_store = false;
 	      }
 	  }
 
@@ -1456,7 +1458,7 @@ set_internal (Lisp_Object symbol, Lisp_Object newval, Lisp_Object where,
 	    sym->u.s.redirect = SYMBOL_PLAINVAL;
 	    SET_SYMBOL_VAL (sym, newval);
 	  }
-	else
+	else if (should_store)
 	  store_symval_forwarding (/* sym, */ innercontents, newval, buf);
 	break;
       }
