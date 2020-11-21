@@ -1004,8 +1004,8 @@ do_symval_forwarding (lispfwd valcontents)
       return *XOBJFWD (valcontents)->objvar;
 
     case Lisp_Fwd_Buffer_Obj:
-      return per_buffer_value (current_buffer,
-			       XBUFFER_OBJFWD (valcontents)->offset);
+      return bvar_get (current_buffer,
+                       XBUFFER_OBJFWD (valcontents)->offset);
 
     case Lisp_Fwd_Kboard_Obj:
       /* We used to simply use current_kboard here, but from Lisp
@@ -1102,31 +1102,6 @@ store_symval_forwarding (lispfwd valcontents, Lisp_Object newval,
 
     case Lisp_Fwd_Obj:
       *XOBJFWD (valcontents)->objvar = newval;
-
-      /* If this variable is a default for something stored
-	 in the buffer itself, such as default-fill-column,
-	 find the buffers that don't have local values for it
-	 and update them.  */
-      if (XOBJFWD (valcontents)->objvar > (Lisp_Object *) &buffer_defaults
-	  && XOBJFWD (valcontents)->objvar < (Lisp_Object *) (&buffer_defaults + 1))
-	{
-	  int offset = ((char *) XOBJFWD (valcontents)->objvar
-			- (char *) &buffer_defaults);
-	  int idx = PER_BUFFER_IDX (offset);
-
-	  Lisp_Object tail, buf;
-
-	  if (idx <= 0)
-	    break;
-
-	  FOR_EACH_LIVE_BUFFER (tail, buf)
-	    {
-	      struct buffer *b = XBUFFER (buf);
-
-	      if (! PER_BUFFER_VALUE_P (b, offset))
-		set_per_buffer_value (b, offset, newval);
-	    }
-	}
       break;
 
     case Lisp_Fwd_Buffer_Obj:
@@ -1163,9 +1138,6 @@ store_symval_forwarding (lispfwd valcontents, Lisp_Object newval,
 	if (buf == NULL)
 	  buf = current_buffer;
 	set_per_buffer_value (buf, offset, newval);
-        int idx = PER_BUFFER_IDX (offset);
-        if (idx > 0)
-          SET_PER_BUFFER_VALUE_P (buf, idx, 1);
       }
       break;
 
@@ -1724,27 +1696,6 @@ set_default_internal (Lisp_Object symbol, Lisp_Object value,
 	    int offset = XBUFFER_OBJFWD (valcontents)->offset;
 
 	    set_per_buffer_default (offset, value);
-
-	    /* If this variable is not always local in all buffers,
-	       set it in the buffers that don't nominally have a local value.  */
-	    if (BUFFER_DEFAULT_VALUE_P (offset))
-	      {
-		Lisp_Object buf, tail;
-
-		/* Do this only in live buffers, so that if there are
-		   a lot of buffers which are dead, that doesn't slow
-		   down let-binding of variables that are
-		   automatically local when set, like
-		   case-fold-search.  This is for Lisp programs that
-		   let-bind such variables in their inner loops.  */
-		FOR_EACH_LIVE_BUFFER (tail, buf)
-		  {
-		    struct buffer *b = XBUFFER (buf);
-
-		    if (!PER_BUFFER_VALUE_P (b, offset))
-		      set_per_buffer_value (b, offset, value);
-		  }
-	      }
 	  }
 	else
           set_internal (symbol, value, Qnil, bindflag);

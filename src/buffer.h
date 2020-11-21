@@ -280,9 +280,12 @@ struct buffer_text
     bool_bf redisplay : 1;
   };
 
+INLINE Lisp_Object
+bvar_get (struct buffer *b, ptrdiff_t offset);
+
 /* Most code should use this macro to access Lisp fields in struct buffer.  */
 
-#define BVAR(buf, field) ((buf)->field ## _)
+#define BVAR(buf, field) bvar_get (buf, PER_BUFFER_VAR_OFFSET (field))
 
 /* Access a BVAR from buffer_defaults */
 #define BVAR_DEFAULT(field) (buffer_defaults.field ## _)
@@ -601,13 +604,6 @@ struct buffer
      an indirect buffer since it counts as its base buffer.  */
   int window_count;
 
-  /* A non-zero value in slot IDX means that per-buffer variable
-     with index IDX has a local value in this buffer.  The index IDX
-     for a buffer-local variable is stored in that variable's slot
-     in buffer_local_flags as a Lisp integer.  If the index is -1,
-     this means the variable is always local in all buffers.  */
-  char local_flags[MAX_PER_BUFFER_VARS];
-
   /* Set to the modtime of the visited file when read or written.
      modtime.tv_nsec == NONEXISTENT_MODTIME_NSECS means
      visited file was nonexistent.  modtime.tv_nsec ==
@@ -691,6 +687,12 @@ struct buffer
      the struct buffer. So we copy it around in set_buffer_internal.  */
   Lisp_Object undo_list_;
 };
+
+/* Return the offset in bytes of member VAR of struct buffer
+   from the start of a buffer structure.  */
+
+#define PER_BUFFER_VAR_OFFSET(VAR) \
+  offsetof (struct buffer, VAR ## _)
 
 INLINE bool
 BUFFERP (Lisp_Object a)
@@ -1110,8 +1112,7 @@ BUFFER_CHECK_INDIRECTION (struct buffer *b)
    that have special slots in each buffer.
    The default value occupies the same slot in this structure
    as an individual buffer's value occupies in that buffer.
-   Setting the default value also goes through the alist of buffers
-   and stores into each buffer that does not say it has a local value.  */
+*/
 
 extern struct buffer buffer_defaults;
 
@@ -1394,12 +1395,6 @@ OVERLAY_POSITION (Lisp_Object p)
 			Buffer-local Variables
  ***********************************************************************/
 
-/* Return the offset in bytes of member VAR of struct buffer
-   from the start of a buffer structure.  */
-
-#define PER_BUFFER_VAR_OFFSET(VAR) \
-  offsetof (struct buffer, VAR ## _)
-
 /* Used to iterate over normal Lisp_Object fields of struct buffer (all
    Lisp_Objects except undo_list).  If you add, remove, or reorder
    Lisp_Objects in a struct buffer, make sure that this is still correct.  */
@@ -1419,16 +1414,6 @@ OVERLAY_POSITION (Lisp_Object p)
     PER_BUFFER_IDX (PER_BUFFER_VAR_OFFSET (VAR))
 
 extern bool valid_per_buffer_idx (int);
-
-/* Set whether per-buffer variable with index IDX has a buffer-local
-   value in buffer B.  VAL zero means it hasn't.  */
-
-INLINE void
-SET_PER_BUFFER_VALUE_P (struct buffer *b, int idx, bool val)
-{
-  eassert (valid_per_buffer_idx (idx));
-  b->local_flags[idx] = val;
-}
 
 /* Return the index value of the per-buffer variable at offset OFFSET
    in the buffer structure.
@@ -1502,9 +1487,16 @@ BUFFER_DEFAULT_VALUE_P (int offset)
 INLINE bool
 PER_BUFFER_VALUE_P (struct buffer *b, int offset)
 {
-  int idx = PER_BUFFER_IDX (offset);
-  eassert (idx == -1 || valid_per_buffer_idx (idx));
-  return idx == -1 || b->local_flags[idx];
+  return !EQ (per_buffer_value (b, offset), Qunbound);
+}
+
+INLINE Lisp_Object
+bvar_get (struct buffer *b, ptrdiff_t offset)
+{
+  Lisp_Object val = per_buffer_value (b, offset);
+  return EQ (val, Qunbound)
+    ? per_buffer_default (offset)
+    : val;
 }
 
 /* Kill the per-buffer binding for this value, if there is one. */
@@ -1512,9 +1504,7 @@ PER_BUFFER_VALUE_P (struct buffer *b, int offset)
 INLINE void
 KILL_PER_BUFFER_VALUE (struct buffer *b, int offset)
 {
-  int idx = PER_BUFFER_IDX (offset);
-  SET_PER_BUFFER_VALUE_P (b, idx, 0);
-  set_per_buffer_value (b, offset, per_buffer_default (offset));
+  set_per_buffer_value (b, offset, Qunbound);
 }
 
 /* Downcase a character C, or make no change if that cannot be done.  */

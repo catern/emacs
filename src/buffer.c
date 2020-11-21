@@ -55,8 +55,7 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
    defined with DEFVAR_PER_BUFFER, that have special slots in each buffer.
    The default value occupies the same slot in this structure
    as an individual buffer's value occupies in that buffer.
-   Setting the default value also goes through the alist of buffers
-   and stores into each buffer that does not say it has a local value.  */
+*/
 
 struct buffer buffer_defaults;
 
@@ -88,6 +87,8 @@ struct buffer buffer_local_symbols;
 
 #define PER_BUFFER_SYMBOL(OFFSET) \
       (*(Lisp_Object *)((OFFSET) + (char *) &buffer_local_symbols))
+
+#define BVAR_DIRECT(buf, field) ((buf)->field ## _)
 
 /* Maximum length of an overlay vector.  */
 #define OVERLAY_COUNT_MAX						\
@@ -535,8 +536,6 @@ even if it is dead.  The return value is never nil.  */)
   /* No one shows us now.  */
   b->window_count = 0;
 
-  memset (&b->local_flags, 0, sizeof (b->local_flags));
-
   BUF_GAP_SIZE (b) = 20;
   block_input ();
   /* We allocate extra 1-byte at the tail and keep it always '\0' for
@@ -697,8 +696,6 @@ clone_per_buffer_values (struct buffer *from, struct buffer *to)
       set_per_buffer_value (to, offset, obj);
     }
 
-  memcpy (to->local_flags, from->local_flags, sizeof to->local_flags);
-
   set_buffer_overlays_before (to, copy_overlays (to, from->overlays_before));
   set_buffer_overlays_after (to, copy_overlays (to, from->overlays_after));
 
@@ -799,8 +796,6 @@ CLONE nil means the indirect buffer's state is reset to default values.  */)
   b->base_buffer->indirections++;
   /* Always -1 for an indirect buffer.  */
   b->window_count = -1;
-
-  memset (&b->local_flags, 0, sizeof (b->local_flags));
 
   b->pt = b->base_buffer->pt;
   b->begv = b->base_buffer->begv;
@@ -963,8 +958,6 @@ reset_buffer (register struct buffer *b)
   bset_display_count (b, make_fixnum (0));
   bset_display_time (b, Qnil);
   bset_enable_multibyte_characters (b, Qt);
-  bset_cursor_type (b, BVAR (&buffer_defaults, cursor_type));
-  bset_extra_line_spacing (b, BVAR (&buffer_defaults, extra_line_spacing));
 
   b->display_error_modiff = 0;
 }
@@ -1238,7 +1231,7 @@ buffer_local_value (Lisp_Object variable, Lisp_Object buffer)
       {
 	lispfwd fwd = SYMBOL_FWD (sym);
 	if (BUFFER_OBJFWDP (fwd))
-	  result = per_buffer_value (buf, XBUFFER_OBJFWD (fwd)->offset);
+          result = bvar_get (buf, XBUFFER_OBJFWD (fwd)->offset);
 	else
 	  result = Fdefault_value (variable);
 	break;
@@ -5163,49 +5156,49 @@ init_buffer_once (void)
   bset_last_selected_window (&buffer_local_flags, make_fixnum (0));
 
   idx = 1;
-  XSETFASTINT (BVAR (&buffer_local_flags, mode_line_format), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, abbrev_mode), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, overwrite_mode), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, case_fold_search), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, auto_fill_function), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, selective_display), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, selective_display_ellipses), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, tab_width), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, truncate_lines), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, word_wrap), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, ctl_arrow), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, fill_column), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, left_margin), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, abbrev_table), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, display_table), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, syntax_table), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, cache_long_scans), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, category_table), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, bidi_display_reordering), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, bidi_paragraph_direction), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, bidi_paragraph_separate_re), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, bidi_paragraph_start_re), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, buffer_file_coding_system), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, left_margin_cols), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, right_margin_cols), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, left_fringe_width), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, right_fringe_width), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, fringes_outside_margins), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, scroll_bar_width), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, scroll_bar_height), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, vertical_scroll_bar_type), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, horizontal_scroll_bar_type), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, indicate_empty_lines), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, indicate_buffer_boundaries), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, fringe_indicator_alist), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, fringe_cursor_alist), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, scroll_up_aggressively), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, scroll_down_aggressively), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, header_line_format), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, tab_line_format), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, cursor_type), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, extra_line_spacing), idx); ++idx;
-  XSETFASTINT (BVAR (&buffer_local_flags, cursor_in_non_selected_windows), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, mode_line_format), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, abbrev_mode), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, overwrite_mode), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, case_fold_search), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, auto_fill_function), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, selective_display), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, selective_display_ellipses), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, tab_width), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, truncate_lines), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, word_wrap), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, ctl_arrow), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, fill_column), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, left_margin), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, abbrev_table), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, display_table), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, syntax_table), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, cache_long_scans), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, category_table), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, bidi_display_reordering), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, bidi_paragraph_direction), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, bidi_paragraph_separate_re), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, bidi_paragraph_start_re), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, buffer_file_coding_system), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, left_margin_cols), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, right_margin_cols), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, left_fringe_width), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, right_fringe_width), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, fringes_outside_margins), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, scroll_bar_width), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, scroll_bar_height), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, vertical_scroll_bar_type), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, horizontal_scroll_bar_type), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, indicate_empty_lines), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, indicate_buffer_boundaries), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, fringe_indicator_alist), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, fringe_cursor_alist), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, scroll_up_aggressively), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, scroll_down_aggressively), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, header_line_format), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, tab_line_format), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, cursor_type), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, extra_line_spacing), idx); ++idx;
+  XSETFASTINT (BVAR_DIRECT (&buffer_local_flags, cursor_in_non_selected_windows), idx); ++idx;
 
   /* buffer_local_flags contains no pointers, so it's safe to treat it
      as a blob for pdumper.  */
@@ -5220,11 +5213,9 @@ init_buffer_once (void)
   /* Make sure all markable slots in buffer_defaults
      are initialized reasonably, so mark_buffer won't choke.  */
   reset_buffer (&buffer_defaults);
-  eassert (NILP (BVAR (&buffer_defaults, name)));
-  reset_buffer_local_variables (&buffer_defaults, 1);
-  eassert (NILP (BVAR (&buffer_local_symbols, name)));
+  eassert (NILP (BVAR_DIRECT (&buffer_defaults, name)));
+  eassert (NILP (BVAR_DIRECT (&buffer_local_symbols, name)));
   reset_buffer (&buffer_local_symbols);
-  reset_buffer_local_variables (&buffer_local_symbols, 1);
   /* Prevent GC from getting confused.  */
   buffer_defaults.text = &buffer_defaults.own_text;
   buffer_local_symbols.text = &buffer_local_symbols.own_text;
@@ -5265,7 +5256,7 @@ init_buffer_once (void)
   set_buffer_overlays_after (&buffer_defaults, NULL);
   buffer_defaults.overlay_center = BEG;
 
-  XSETFASTINT (BVAR (&buffer_defaults, tab_width), 8);
+  XSETFASTINT (BVAR_DIRECT (&buffer_defaults, tab_width), 8);
   bset_truncate_lines (&buffer_defaults, Qnil);
   bset_word_wrap (&buffer_defaults, Qnil);
   bset_ctl_arrow (&buffer_defaults, Qt);
@@ -5279,13 +5270,13 @@ init_buffer_once (void)
 
   bset_enable_multibyte_characters (&buffer_defaults, Qt);
   bset_buffer_file_coding_system (&buffer_defaults, Qnil);
-  XSETFASTINT (BVAR (&buffer_defaults, fill_column), 70);
-  XSETFASTINT (BVAR (&buffer_defaults, left_margin), 0);
+  XSETFASTINT (BVAR_DIRECT (&buffer_defaults, fill_column), 70);
+  XSETFASTINT (BVAR_DIRECT (&buffer_defaults, left_margin), 0);
   bset_cache_long_scans (&buffer_defaults, Qt);
   bset_file_truename (&buffer_defaults, Qnil);
-  XSETFASTINT (BVAR (&buffer_defaults, display_count), 0);
-  XSETFASTINT (BVAR (&buffer_defaults, left_margin_cols), 0);
-  XSETFASTINT (BVAR (&buffer_defaults, right_margin_cols), 0);
+  XSETFASTINT (BVAR_DIRECT (&buffer_defaults, display_count), 0);
+  XSETFASTINT (BVAR_DIRECT (&buffer_defaults, left_margin_cols), 0);
+  XSETFASTINT (BVAR_DIRECT (&buffer_defaults, right_margin_cols), 0);
   bset_left_fringe_width (&buffer_defaults, Qnil);
   bset_right_fringe_width (&buffer_defaults, Qnil);
   bset_fringes_outside_margins (&buffer_defaults, Qnil);

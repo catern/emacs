@@ -268,12 +268,8 @@ DEFUN ("set-category-table", Fset_category_table, Sset_category_table, 1, 1, 0,
 Return TABLE.  */)
   (Lisp_Object table)
 {
-  int idx;
   table = check_category_table (table);
   bset_category_table (current_buffer, table);
-  /* Indicate that this buffer now has a specified category table.  */
-  idx = PER_BUFFER_VAR_IDX (category_table);
-  SET_PER_BUFFER_VALUE_P (current_buffer, idx, 1);
   return table;
 }
 

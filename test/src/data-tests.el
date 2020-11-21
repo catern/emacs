@@ -424,7 +424,6 @@ comparing the subr with a much slower lisp implementation."
   (with-no-warnings (should (setq :keyword :keyword))))
 
 (ert-deftest data-tests--set-default-per-buffer ()
-  :expected-result t ;; Not fixed yet!
   ;; FIXME: Performance tests are inherently unreliable.
   ;; Using wall-clock time makes it even worse, so don't bother unless
   ;; we have the primitive to measure cpu-time.

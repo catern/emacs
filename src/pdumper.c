@@ -2785,9 +2785,6 @@ dump_buffer (struct dump_context *ctx, const struct buffer *in_buffer)
   DUMP_FIELD_COPY (out, buffer, indirections);
   DUMP_FIELD_COPY (out, buffer, window_count);
 
-  memcpy (out->local_flags,
-          &buffer->local_flags,
-          sizeof (out->local_flags));
   DUMP_FIELD_COPY (out, buffer, modtime);
   DUMP_FIELD_COPY (out, buffer, modtime_size);
   DUMP_FIELD_COPY (out, buffer, auto_save_modified);
