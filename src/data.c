@@ -1600,7 +1600,6 @@ default_value (Lisp_Object symbol)
 	if (BUFFER_OBJFWDP (valcontents))
 	  {
 	    int offset = XBUFFER_OBJFWD (valcontents)->offset;
-	    eassert (PER_BUFFER_IDX (offset) != 0);
             return per_buffer_default (offset);
 	  }
 

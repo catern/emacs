@@ -1112,25 +1112,10 @@ BUFFER_CHECK_INDIRECTION (struct buffer *b)
    that have special slots in each buffer.
    The default value occupies the same slot in this structure
    as an individual buffer's value occupies in that buffer.
-*/
+   Slots in this structure which are set to Qunbound are permanently
+   buffer-local. */
 
 extern struct buffer buffer_defaults;
-
-/* This structure marks which slots in a buffer have corresponding
-   default values in buffer_defaults.
-   Each such slot has a nonzero value in this structure.
-   The value has only one nonzero bit.
-
-   When a buffer has its own local value for a slot,
-   the entry for that slot (found in the same slot in this structure)
-   is turned on in the buffer's local_flags array.
-
-   If a slot in this structure is zero, then even though there may
-   be a Lisp-level local variable for the slot, it has no default value,
-   and the corresponding slot in buffer_defaults is not used.  */
-
-
-extern struct buffer buffer_local_flags;
 
 /* For each buffer slot, this points to the Lisp symbol name
    for that slot in the current buffer.  It is 0 for slots
@@ -1404,43 +1389,6 @@ OVERLAY_POSITION (Lisp_Object p)
        offset <= PER_BUFFER_VAR_OFFSET (cursor_in_non_selected_windows); \
        offset += word_size)
 
-/* Return the index of buffer-local variable VAR.  Each per-buffer
-   variable has an index > 0 associated with it, except when it always
-   has buffer-local values, in which case the index is -1.  If this is
-   0, this is a bug and means that the slot of VAR in
-   buffer_local_flags wasn't initialized.  */
-
-#define PER_BUFFER_VAR_IDX(VAR) \
-    PER_BUFFER_IDX (PER_BUFFER_VAR_OFFSET (VAR))
-
-extern bool valid_per_buffer_idx (int);
-
-/* Return the index value of the per-buffer variable at offset OFFSET
-   in the buffer structure.
-
-   If the slot OFFSET has a corresponding default value in
-   buffer_defaults, the index value is positive and has only one
-   nonzero bit.  When a buffer has its own local value for a slot, the
-   bit for that slot (found in the same slot in this structure) is
-   turned on in the buffer's local_flags array.
-
-   If the index value is -1, even though there may be a
-   DEFVAR_PER_BUFFER for the slot, there is no default value for it;
-   and the corresponding slot in buffer_defaults is not used.
-
-   If the index value is -2, then there is no DEFVAR_PER_BUFFER for
-   the slot, but there is a default value which is copied into each
-   new buffer.
-
-   If a slot in this structure corresponding to a DEFVAR_PER_BUFFER is
-   zero, that is a bug.  */
-
-INLINE int
-PER_BUFFER_IDX (ptrdiff_t offset)
-{
-  return XFIXNUM (*(Lisp_Object *) (offset + (char *) &buffer_local_flags));
-}
-
 /* Functions to get and set default value of the per-buffer
    variable at offset OFFSET in the buffer structure.  */
 
@@ -1478,7 +1426,7 @@ set_per_buffer_value (struct buffer *b, int offset, Lisp_Object value)
 INLINE bool
 BUFFER_DEFAULT_VALUE_P (int offset)
 {
-  return PER_BUFFER_IDX (offset) > 0;
+  return !EQ (per_buffer_default (offset), Qunbound);
 }
 
 /* Value is true if the variable with offset OFFSET has a local value
