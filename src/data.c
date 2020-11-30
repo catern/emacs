@@ -1004,8 +1004,8 @@ do_symval_forwarding (lispfwd valcontents)
       return *XOBJFWD (valcontents)->objvar;
 
     case Lisp_Fwd_Buffer_Obj:
-      return per_buffer_value (current_buffer,
-			       XBUFFER_OBJFWD (valcontents)->offset);
+      return bvar_get (current_buffer,
+                       XBUFFER_OBJFWD (valcontents)->offset);
 
     case Lisp_Fwd_Kboard_Obj:
       /* We used to simply use current_kboard here, but from Lisp
@@ -1102,31 +1102,6 @@ store_symval_forwarding (lispfwd valcontents, Lisp_Object newval,
 
     case Lisp_Fwd_Obj:
       *XOBJFWD (valcontents)->objvar = newval;
-
-      /* If this variable is a default for something stored
-	 in the buffer itself, such as default-fill-column,
-	 find the buffers that don't have local values for it
-	 and update them.  */
-      if (XOBJFWD (valcontents)->objvar > (Lisp_Object *) &buffer_defaults
-	  && XOBJFWD (valcontents)->objvar < (Lisp_Object *) (&buffer_defaults + 1))
-	{
-	  int offset = ((char *) XOBJFWD (valcontents)->objvar
-			- (char *) &buffer_defaults);
-	  int idx = PER_BUFFER_IDX (offset);
-
-	  Lisp_Object tail, buf;
-
-	  if (idx <= 0)
-	    break;
-
-	  FOR_EACH_LIVE_BUFFER (tail, buf)
-	    {
-	      struct buffer *b = XBUFFER (buf);
-
-	      if (! PER_BUFFER_VALUE_P (b, idx))
-		set_per_buffer_value (b, offset, newval);
-	    }
-	}
       break;
 
     case Lisp_Fwd_Buffer_Obj:
@@ -1436,17 +1411,16 @@ set_internal (Lisp_Object symbol, Lisp_Object newval, Lisp_Object where,
 	struct buffer *buf
 	  = BUFFERP (where) ? XBUFFER (where) : current_buffer;
 	lispfwd innercontents = SYMBOL_FWD (sym);
+        bool should_store = true;
 	if (BUFFER_OBJFWDP (innercontents))
 	  {
 	    int offset = XBUFFER_OBJFWD (innercontents)->offset;
-	    int idx = PER_BUFFER_IDX (offset);
-	    if (idx > 0 && bindflag == SET_INTERNAL_SET
-	        && !PER_BUFFER_VALUE_P (buf, idx))
+	    if (bindflag == SET_INTERNAL_SET
+	        && !PER_BUFFER_VALUE_P (buf, offset)
+                && let_shadows_buffer_binding_p (sym))
 	      {
-		if (let_shadows_buffer_binding_p (sym))
-		  set_default_internal (symbol, newval, bindflag);
-		else
-		  SET_PER_BUFFER_VALUE_P (buf, idx, 1);
+                set_default_internal (symbol, newval, bindflag);
+		should_store = false;
 	      }
 	  }
 
@@ -1456,7 +1430,7 @@ set_internal (Lisp_Object symbol, Lisp_Object newval, Lisp_Object where,
 	    sym->u.s.redirect = SYMBOL_PLAINVAL;
 	    SET_SYMBOL_VAL (sym, newval);
 	  }
-	else
+	else if (should_store)
 	  store_symval_forwarding (/* sym, */ innercontents, newval, buf);
 	break;
       }
@@ -1626,8 +1600,7 @@ default_value (Lisp_Object symbol)
 	if (BUFFER_OBJFWDP (valcontents))
 	  {
 	    int offset = XBUFFER_OBJFWD (valcontents)->offset;
-	    if (PER_BUFFER_IDX (offset) != 0)
-	      return per_buffer_default (offset);
+            return per_buffer_default (offset);
 	  }
 
 	/* For other variables, get the current value.  */
@@ -1720,30 +1693,8 @@ set_default_internal (Lisp_Object symbol, Lisp_Object value,
 	if (BUFFER_OBJFWDP (valcontents))
 	  {
 	    int offset = XBUFFER_OBJFWD (valcontents)->offset;
-	    int idx = PER_BUFFER_IDX (offset);
 
 	    set_per_buffer_default (offset, value);
-
-	    /* If this variable is not always local in all buffers,
-	       set it in the buffers that don't nominally have a local value.  */
-	    if (idx > 0)
-	      {
-		Lisp_Object buf, tail;
-
-		/* Do this only in live buffers, so that if there are
-		   a lot of buffers which are dead, that doesn't slow
-		   down let-binding of variables that are
-		   automatically local when set, like
-		   case-fold-search.  This is for Lisp programs that
-		   let-bind such variables in their inner loops.  */
-		FOR_EACH_LIVE_BUFFER (tail, buf)
-		  {
-		    struct buffer *b = XBUFFER (buf);
-
-		    if (!PER_BUFFER_VALUE_P (b, idx))
-		      set_per_buffer_value (b, offset, value);
-		  }
-	      }
 	  }
 	else
           set_internal (symbol, value, Qnil, bindflag);
@@ -1994,14 +1945,8 @@ From now on the default value will apply in this buffer.  Return VARIABLE.  */)
 	if (BUFFER_OBJFWDP (valcontents))
 	  {
 	    int offset = XBUFFER_OBJFWD (valcontents)->offset;
-	    int idx = PER_BUFFER_IDX (offset);
-
-	    if (idx > 0)
-	      {
-		SET_PER_BUFFER_VALUE_P (current_buffer, idx, 0);
-		set_per_buffer_value (current_buffer, offset,
-				      per_buffer_default (offset));
-	      }
+	    if (BUFFER_DEFAULT_VALUE_P (offset))
+              KILL_PER_BUFFER_VALUE (current_buffer, offset);
 	  }
 	return variable;
       }
@@ -2077,8 +2022,7 @@ BUFFER defaults to the current buffer.  */)
 	if (BUFFER_OBJFWDP (valcontents))
 	  {
 	    int offset = XBUFFER_OBJFWD (valcontents)->offset;
-	    int idx = PER_BUFFER_IDX (offset);
-	    if (idx == -1 || PER_BUFFER_VALUE_P (buf, idx))
+	    if (PER_BUFFER_VALUE_P (buf, offset))
 	      return Qt;
 	  }
 	return Qnil;

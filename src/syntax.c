@@ -1041,12 +1041,8 @@ DEFUN ("set-syntax-table", Fset_syntax_table, Sset_syntax_table, 1, 1, 0,
 One argument, a syntax table.  */)
   (Lisp_Object table)
 {
-  int idx;
   check_syntax_table (table);
   bset_syntax_table (current_buffer, table);
-  /* Indicate that this buffer now has a specified syntax table.  */
-  idx = PER_BUFFER_VAR_IDX (syntax_table);
-  SET_PER_BUFFER_VALUE_P (current_buffer, idx, 1);
   return table;
 }
 
