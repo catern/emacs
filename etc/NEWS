@@ -2314,6 +2314,17 @@ your mail user agent.  The behavior of 'vc-prepare-patch' can be
 modified by the user options 'vc-prepare-patches-separately' and
 'vc-default-patch-addressee'.
 
+** Ediff
+
+---
+*** New user option 'ediff-floating-control-frame'.
+If non-nil, try making the control frame be floating rather than tiled.
+
+Many X tiling window managers make the Ediff control frame a tiled
+window equal in size to the main Emacs frame, which works poorly.
+This option is useful to set if you use such a window manager, and
+will be harmless (or helpful) on most other modern window managers.
+
 ** Message
 
 ---
