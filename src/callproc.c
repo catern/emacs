@@ -95,26 +95,6 @@ extern char **environ;
 /* Pattern used by call-process-region to make temp files.  */
 static Lisp_Object Vtemp_file_name_pattern;
 
-/* The next two variables are used while record-unwind-protect is in place
-   during call-process for a subprocess for which record_deleted_pid has
-   not yet been called.  At other times, synch_process_pid is zero and
-   synch_process_tempfile's contents are irrelevant.  Doing this via static
-   C variables is more convenient than putting them into the arguments
-   of record-unwind-protect, as they need to be updated at randomish
-   times in the code, and Lisp cannot always store these values as
-   Emacs integers.  It's safe to use static variables here, as the
-   code is never invoked reentrantly.  */
-
-/* If nonzero, a process-ID that has not been reaped.  */
-static pid_t synch_process_pid;
-
-/* If a string, the name of a temp file that has not been removed.  */
-#ifdef MSDOS
-static Lisp_Object synch_process_tempfile;
-#else
-# define synch_process_tempfile make_fixnum (0)
-#endif
-
 /* Indexes of file descriptors that need closing on call_process_kill.  */
 enum
   {
@@ -188,6 +168,17 @@ record_kill_process (struct Lisp_Process *p, Lisp_Object tempfile)
 #endif	/* !MSDOS */
 }
 
+struct synch_process
+{
+  /* If nonzero, a process-ID that has not been reaped.  */
+  pid_t pid;
+  /* If a string, the name of a temp file that has not been
+     removed.  */
+  Lisp_Object tempfile;
+  int *fd;
+  Lisp_Object buffer;
+};
+
 /* Clean up files, file descriptors and processes created by Fcall_process.  */
 
 static void
@@ -199,41 +190,43 @@ delete_temp_file (Lisp_Object name)
 static void
 call_process_kill (void *ptr)
 {
-  int *callproc_fd = ptr;
+  struct synch_process *synch_process = ptr;
+  int *callproc_fd = synch_process->fd;
   int i;
   for (i = 0; i < CALLPROC_FDS; i++)
     if (0 <= callproc_fd[i])
       emacs_close (callproc_fd[i]);
 
-  if (synch_process_pid)
+  if (synch_process->pid)
     {
       struct Lisp_Process proc;
       proc.alive = 1;
-      proc.pid = synch_process_pid;
-      record_kill_process (&proc, synch_process_tempfile);
-      synch_process_pid = 0;
+      proc.pid = synch_process->pid;
+      record_kill_process (&proc, synch_process->tempfile);
+      synch_process->pid = 0;
     }
-  else if (STRINGP (synch_process_tempfile))
-    delete_temp_file (synch_process_tempfile);
+  else if (STRINGP (synch_process->tempfile))
+    delete_temp_file (synch_process->tempfile);
 }
 
 /* Clean up when exiting Fcall_process: restore the buffer, and
    kill the subsidiary process group if the process still exists.  */
 
 static void
-call_process_cleanup (Lisp_Object buffer)
+call_process_cleanup (void *ptr)
 {
-  Fset_buffer (buffer);
+  struct synch_process *synch_process = ptr;
+  Fset_buffer (synch_process->buffer);
 
 #ifndef MSDOS
-  if (synch_process_pid)
+  if (synch_process->pid)
     {
-      kill (-synch_process_pid, SIGINT);
+      kill (-synch_process->pid, SIGINT);
       message1 ("Waiting for process to die...(type C-g again to kill it instantly)");
 
       /* This will quit on C-g.  */
-      bool wait_ok = wait_for_termination (synch_process_pid, NULL, true);
-      synch_process_pid = 0;
+      bool wait_ok = wait_for_termination (synch_process->pid, NULL, true);
+      synch_process->pid = 0;
       message1 (wait_ok
 		? "Waiting for process to die...done"
 		: "Waiting for process to die...internal error");
@@ -360,9 +353,12 @@ call_process (ptrdiff_t nargs, Lisp_Object *args, int filefd,
   /* Set to the return value of Ffind_operation_coding_system.  */
   Lisp_Object coding_systems;
   bool discard_output;
-
-  if (synch_process_pid)
-    error ("call-process invoked recursively");
+  struct synch_process synch_process = {
+    .pid = 0,
+    .tempfile = make_fixnum (0),
+    .fd = callproc_fd,
+    .buffer = Fcurrent_buffer (),
+  };
 
   /* Qt denotes that Ffind_operation_coding_system is not yet called.  */
   coding_systems = Qt;
@@ -489,10 +485,7 @@ call_process (ptrdiff_t nargs, Lisp_Object *args, int filefd,
 
   for (i = 0; i < CALLPROC_FDS; i++)
     callproc_fd[i] = -1;
-#ifdef MSDOS
-  synch_process_tempfile = make_fixnum (0);
-#endif
-  record_unwind_protect_ptr (call_process_kill, callproc_fd);
+  record_unwind_protect_ptr (call_process_kill, &synch_process);
 
   /* Search for program; barf if not found.  */
   {
@@ -547,7 +540,7 @@ call_process (ptrdiff_t nargs, Lisp_Object *args, int filefd,
       if (!*tempfile)
 	report_file_error ("Opening process output file", Qnil);
       output_file = build_string (tempfile);
-      synch_process_tempfile = output_file;
+      data.tempfile = output_file;
     }
 #endif
 
@@ -644,7 +637,7 @@ call_process (ptrdiff_t nargs, Lisp_Object *args, int filefd,
   /* Do the unwind-protect now, even though the pid is not known, so
      that no storage allocation is done in the critical section.
      The actual PID will be filled in during the critical section.  */
-  record_unwind_protect (call_process_cleanup, Fcurrent_buffer ());
+  record_unwind_protect_ptr (call_process_cleanup, &synch_process);
 
 #ifndef MSDOS
 
@@ -659,7 +652,7 @@ call_process (ptrdiff_t nargs, Lisp_Object *args, int filefd,
 
   if (pid > 0)
     {
-      synch_process_pid = pid;
+      synch_process.pid = pid;
 
       if (FIXNUMP (buffer))
 	{
@@ -671,7 +664,7 @@ call_process (ptrdiff_t nargs, Lisp_Object *args, int filefd,
 	      record_deleted_pid (pid, args[1]);
 	      clear_unwind_protect (tempfile_index);
 	    }
-	  synch_process_pid = 0;
+	  synch_process.pid = 0;
 	}
     }
 
@@ -778,6 +771,9 @@ call_process (ptrdiff_t nargs, Lisp_Object *args, int filefd,
 	      nread += this_read;
 	      total_read += this_read;
 
+	      wait_reading_process_output (-1, -1, 0, display_on_the_fly,
+					   NULL, NULL, 0);
+	      swallow_events (display_on_the_fly);
 	      if (display_on_the_fly)
 		break;
 	    }
@@ -904,7 +900,7 @@ call_process (ptrdiff_t nargs, Lisp_Object *args, int filefd,
 
   /* Don't kill any children that the subprocess may have left behind
      when exiting.  */
-  synch_process_pid = 0;
+  synch_process.pid = 0;
 
   SAFE_FREE_UNBIND_TO (count, Qnil);
 
@@ -2034,11 +2030,6 @@ syms_of_callproc (void)
   Vtemp_file_name_pattern = build_string ("emXXXXXX");
 #endif
   staticpro (&Vtemp_file_name_pattern);
-
-#ifdef MSDOS
-  synch_process_tempfile = make_fixnum (0);
-  staticpro (&synch_process_tempfile);
-#endif
 
   DEFVAR_LISP ("shell-file-name", Vshell_file_name,
 	       doc: /* File name to load inferior shells from.
