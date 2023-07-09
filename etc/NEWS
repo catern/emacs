@@ -2989,6 +2989,15 @@ The newly created buffer will be displayed via 'display-buffer', which
 can be customized through the usual mechanism of 'display-buffer-alist'
 and friends.
 
+** Which Function Mode
+
++++
+*** Which Function Mode can now display function names on the header line.
+The new user option 'which-func-display' allows choosing where the
+function name is displayed.  The default is 'mode' to display in the
+mode line.  'header' will display in the header line.
+'mode-and-header' displays in both the header line and mode line.
+
 ** Tramp
 
 +++
