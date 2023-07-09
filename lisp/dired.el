@@ -1306,7 +1306,7 @@ The return value is the target column for the file names."
 	 ;; Note that buffer already is in dired-mode, if found.
 	 (new-buffer-p (null buffer)))
     (or buffer
-        (setq buffer (create-file-buffer (directory-file-name dirname))))
+        (setq buffer (create-file-buffer dirname)))
     (set-buffer buffer)
     (if (not new-buffer-p)		; existing buffer ...
 	(cond (switches			; ... but new switches

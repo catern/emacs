@@ -2062,22 +2062,40 @@ killed."
 	  (kill-buffer obuf))))))
 
 ;; FIXME we really need to fold the uniquify stuff in here by default,
-;; not using advice, and add it to the doc string.
-(defun create-file-buffer (filename)
+(defun create-file-buffer (filename &optional directory-p)
   "Create a suitably named buffer for visiting FILENAME, and return it.
-FILENAME (sans directory) is used unchanged if that name is free;
-otherwise a string <2> or <3> or ... is appended to get an unused name.
 
-Emacs treats buffers whose names begin with a space as internal buffers.
-To avoid confusion when visiting a file whose name begins with a space,
-this function prepends a \"|\" to the final result if necessary."
-  (let* ((lastname (file-name-nondirectory filename))
-	 (lastname (if (string= lastname "")
-	               filename lastname))
-	 (buf (generate-new-buffer (if (string-prefix-p " " lastname)
-			               (concat "|" lastname)
-			             lastname))))
-    (uniquify--create-file-buffer-advice buf filename)
+Either a file name or a directory name can be passed as FILENAME.
+In either case, the last non-empty component of FILENAME is used
+as the buffer name.
+
+If `uniquify-trailing-separator-p' is non-nil, then if FILENAME
+is a directory name, a file name separator is included in the
+buffer name.  If DIRECTORY-P is non-nil, this will happen even if
+FILENAME is a file name.
+
+Emacs treats buffers whose names begin with a space as internal
+buffers.  To avoid confusion when visiting a file whose name
+begins with a space, this function prepends a \"|\" to the buffer
+name if necessary.
+
+If the buffer name is already in use, the buffer will be renamed
+according to `uniquify-buffer-name-style' to get an unused name."
+  (let* ((lastname (file-name-nondirectory (directory-file-name filename)))
+         (lastname (cond
+                    ((not (and uniquify-trailing-separator-p
+                               (or (directory-name-p filename) directory-p)))
+                     lastname)
+                    ((eq uniquify-buffer-name-style 'forward)
+	             (file-name-as-directory lastname))
+	            ((eq uniquify-buffer-name-style 'reverse)
+	             (concat (or uniquify-separator "\\") lastname))
+                    (t lastname)))
+         (basename (if (string-prefix-p " " lastname)
+		       (concat "|" lastname)
+		     lastname))
+	 (buf (generate-new-buffer basename)))
+    (uniquify--create-file-buffer-advice buf filename basename)
     buf))
 
 (defvar abbreviated-home-dir nil
