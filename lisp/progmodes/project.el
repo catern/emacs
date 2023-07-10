@@ -1835,5 +1835,17 @@ to directory DIR."
     (let ((project-current-directory-override dir))
       (call-interactively command))))
 
+;;;###autoload
+(defun project-uniquify-dirname-transform (dirname)
+  "Include `project-name' in DIRNAME if in a project."
+  (if-let (proj (project-current nil dirname))
+      (let ((root (project-root proj)))
+        (expand-file-name
+         (file-name-concat
+          (file-name-directory root)
+          (project-name proj)
+          (file-relative-name dirname root))))
+    dirname))
+
 (provide 'project)
 ;;; project.el ends here
