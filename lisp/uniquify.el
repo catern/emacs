@@ -168,6 +168,16 @@ This can be handy when you have deep parallel hierarchies."
 That means that when `buffer-file-name' is set to nil, `list-buffers-directory'
 contains the name of the directory which the buffer is visiting.")
 
+(defcustom uniquify-dirname-transform #'identity
+  "A function to transform the dirname used to uniquify a buffer.
+
+It takes a single argument: the directory of the buffer.  It
+should return a string filename (which does not need to actually
+exist in the filesystem) to use for uniquifying the buffer name."
+  :type '(choice (function-item :tag "Don't change the dirname" identity)
+                 function)
+  :group 'uniquify)
+
 ;;; Utilities
 
 ;; uniquify-fix-list data structure
@@ -209,7 +219,8 @@ this rationalization."
   ;; this buffer.
   (with-current-buffer newbuf (setq uniquify-managed nil))
   (when dirname
-    (setq dirname (expand-file-name (directory-file-name dirname)))
+    (setq dirname (funcall uniquify-dirname-transform
+                           (expand-file-name (directory-file-name dirname))))
     (let ((fix-list (list (uniquify-make-item base dirname newbuf
                                               nil)))
 	  items)
@@ -268,10 +279,11 @@ in `uniquify-list-buffers-directory-modes', otherwise returns nil."
 	       (if (memq major-mode uniquify-list-buffers-directory-modes)
 		   list-buffers-directory))))
       (when filename
-	(directory-file-name
-	 (file-name-directory
-	  (expand-file-name
-	   (directory-file-name filename))))))))
+	 (funcall uniquify-dirname-transform
+	          (directory-file-name
+	          (file-name-directory
+	           (expand-file-name
+	            (directory-file-name filename)))))))))
 
 (defun uniquify-rerationalize-w/o-cb (fix-list)
   "Re-rationalize the buffers in FIX-LIST, but ignoring `current-buffer'."
