@@ -213,6 +213,15 @@ nil value globally, since the usual requirement of the Emacs display to
 make the cursor line fully visible contradicts the smooth scrolling
 expectations.
 
+** Diff
+
+---
+*** New command 'diff-kill-ring-save'
+This command copies to the 'kill-ring' a region of text modified
+according to diffs in the current buffer, but without applying the diffs
+to the original text.  If the selected range extends a hunk, the
+commands attempts to look up and copy the text in-between the hunks.
+
 
 * Changes in Emacs 30.1
 
