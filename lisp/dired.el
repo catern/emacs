@@ -3189,6 +3189,12 @@ Otherwise, an error occurs in these cases."
 	(if (and handler (not (get handler 'safe-magic)))
 	    (concat "/:" file)
 	  file)))
+     ((eq localp 'project)
+      (if-let ((project (project-current nil (dired-current-directory))))
+          (file-relative-name
+           (concat (dired-current-directory) file)
+           (project-root project))
+        (concat (dired-current-directory t) file)))
      (t
       (concat (dired-current-directory localp) file)))))
 
@@ -3422,6 +3428,7 @@ quoting is done.)
 With a zero prefix arg, use the absolute file name of each marked file.
 With \\[universal-argument], use the file name relative to the Dired buffer's
 `default-directory'.  (This still may contain slashes if in a subdirectory.)
+With \\[universal-argument] \\[universal-argument], use the file name relative to `project-root'.
 
 If on a subdir headerline, use absolute subdirname instead;
 prefix arg and marked files are ignored in this case.
@@ -3433,8 +3440,10 @@ You can then feed the file name(s) to other commands with \\[yank]."
               (if arg
                   (cond ((zerop (prefix-numeric-value arg))
                          (dired-get-marked-files))
-                        ((consp arg)
+                        ((and (consp arg) (= 4 (prefix-numeric-value arg)))
                          (dired-get-marked-files t))
+                        ((and (consp arg) (>= 16 (prefix-numeric-value arg)))
+                         (dired-get-marked-files 'project))
                         (t
                          (dired-get-marked-files
 			  'no-dir (prefix-numeric-value arg))))
