@@ -2396,6 +2396,26 @@ These include:
         (resize-temp-buffer-window win))
     (fit-window-to-buffer win completions-max-height)))
 
+(defcustom completions-auto-update t
+  "If non-nil, update the *Completions* buffer as you type.
+
+This only affects the *Completions* buffer if it is already
+displayed."
+  :type '(choice (const :tag "*Completions* doesn't change as you type" nil)
+                 (const :tag "*Completions* updates as you type" t))
+  :version "30.1")
+
+(defun completions--post-command ()
+  "Update a displayed *Completions* buffer after a change"
+  (when completions-auto-update
+    (while-no-input
+      (let ((non-essential t))
+        (when (get-buffer-window "*Completions*" 0)
+          (redisplay)
+          (if completion-in-region-mode
+              (completion-help-at-point)
+            (minibuffer-completion-help)))))))
+
 (defun minibuffer-completion-help (&optional start end)
   "Display a list of possible completions of the current minibuffer contents."
   (interactive)
@@ -2418,6 +2438,7 @@ These include:
           ;; If there are no completions, or if the current input is already
           ;; the sole completion, then hide (previous&stale) completions.
           (minibuffer-hide-completions)
+          (remove-hook 'post-command-hook #'completions--post-command t)
           (if completions
               (completion--message "Sole completion")
             (unless completion-fail-discreetly
@@ -2472,6 +2493,9 @@ These include:
             (body-function
              . ,#'(lambda (window)
                     (with-current-buffer mainbuf
+                      (when completions-auto-update
+                        (add-hook 'post-command-hook #'completions--post-command nil t))
+
                       ;; Remove the base-size tail because `sort' requires a properly
                       ;; nil-terminated list.
                       (when last (setcdr last nil))
