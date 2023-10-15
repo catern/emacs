@@ -2045,12 +2045,17 @@ If this is nil, no heading line will be shown."
                  (string :tag "Format string for heading line"))
   :version "29.1")
 
-(defun completion--insert-strings (strings &optional group-fun)
+(defvar completion--selected-posn)
+
+(defun completion--insert-strings (strings &optional group-fun selected)
   "Insert a list of STRINGS into the current buffer.
 The candidate strings are inserted into the buffer depending on the
 completions format as specified by the variable `completions-format'.
 Runs of equal candidate strings are eliminated.  GROUP-FUN is a
-`group-function' used for grouping the completion candidates."
+`group-function' used for grouping the completion candidates.
+
+If SELECTED exists in STRINGS, point is set to its first
+instance; otherwise, it's set to `point-min'."
   (when (consp strings)
     (let* ((length (apply #'max
 			  (mapcar (lambda (s)
@@ -2066,18 +2071,20 @@ Runs of equal candidate strings are eliminated.  GROUP-FUN is a
 		     ;; Don't allocate more columns than we can fill.
 		     ;; Windows can't show less than 3 lines anyway.
 		     (max 1 (/ (length strings) 2))))
-	   (colwidth (/ wwidth columns)))
+	   (colwidth (/ wwidth columns))
+           completion--selected-posn)
       (unless (or tab-stop-list (null completion-tab-width)
                   (zerop (mod colwidth completion-tab-width)))
         ;; Align to tab positions for the case
         ;; when the caller uses tabs inside prefix.
         (setq colwidth (- colwidth (mod colwidth completion-tab-width))))
       (funcall (intern (format "completion--insert-%s" completions-format))
-               strings group-fun length wwidth colwidth columns))))
+               strings group-fun length wwidth colwidth columns selected)
+      (goto-char (or completion--selected-posn (point-min))))))
 
 (defun completion--insert-horizontal (strings group-fun
                                               length wwidth
-                                              colwidth _columns)
+                                              colwidth _columns selected)
   (let ((column 0)
         (first t)
 	(last-title nil)
@@ -2114,7 +2121,7 @@ Runs of equal candidate strings are eliminated.  GROUP-FUN is a
 				 `(display (space :align-to ,column)))
 	    nil))
         (setq first nil)
-        (completion--insert str group-fun)
+        (completion--insert str group-fun selected)
 	;; Next column to align to.
 	(setq column (+ column
 			;; Round up to a whole number of columns.
@@ -2122,7 +2129,7 @@ Runs of equal candidate strings are eliminated.  GROUP-FUN is a
 
 (defun completion--insert-vertical (strings group-fun
                                             _length _wwidth
-                                            colwidth columns)
+                                            colwidth columns selected)
   (while strings
     (let ((group nil)
           (column 0)
@@ -2166,13 +2173,15 @@ Runs of equal candidate strings are eliminated.  GROUP-FUN is a
 	    (insert " \t")
 	    (set-text-properties (1- (point)) (point)
 			         `(display (space :align-to ,column))))
-          (completion--insert str group-fun)
+          (completion--insert str group-fun selected)
 	  (if (> column 0)
 	      (forward-line)
 	    (insert "\n"))
 	  (setq row (1+ row)))))))
 
-(defun completion--insert-one-column (strings group-fun &rest _)
+(defun completion--insert-one-column (strings group-fun
+                                              _length _wwidth
+                                              _colwidth _columns selected)
   (let ((last-title nil) (last-string nil))
     (dolist (str strings)
       (unless (equal last-string str) ; Remove (consecutive) duplicates.
@@ -2183,11 +2192,14 @@ Runs of equal candidate strings are eliminated.  GROUP-FUN is a
               (setq last-title title)
               (when title
                 (insert (format completions-group-format title) "\n")))))
-        (completion--insert str group-fun)
+        (completion--insert str group-fun selected)
         (insert "\n")))
     (delete-char -1)))
 
-(defun completion--insert (str group-fun)
+(defun completion--insert (str group-fun selected)
+  (when (and (not completion--selected-posn)
+             (equal (or (car-safe str) str) selected))
+    (setq completion--selected-posn (point)))
   (if (not (consp str))
       (add-text-properties
        (point)
@@ -2208,7 +2220,7 @@ Runs of equal candidate strings are eliminated.  GROUP-FUN is a
         (let ((beg (point))
               (end (progn (insert prefix) (point))))
           (add-text-properties beg end `(mouse-face nil completion--string ,(car str)))))
-      (completion--insert (car str) group-fun)
+      (completion--insert (car str) group-fun selected)
       (let ((beg (point))
             (end (progn (insert suffix) (point))))
         (add-text-properties beg end `(mouse-face nil completion--string ,(car str)))
@@ -2278,7 +2290,7 @@ and with BASE-SIZE appended as the last element."
         completions)
        base-size))))
 
-(defun display-completion-list (completions &optional common-substring group-fun)
+(defun display-completion-list (completions &optional common-substring group-fun selected)
   "Display the list of completions, COMPLETIONS, using `standard-output'.
 Each element may be just a symbol or string
 or may be a list of two strings to be printed as if concatenated.
@@ -2287,6 +2299,8 @@ alternative, the second serves as annotation.
 `standard-output' must be a buffer.
 The actual completion alternatives, as inserted, are given `mouse-face'
 properties of `highlight'.
+If SELECTED exists in COMPLETIONS, point is set to its first
+instance; otherwise, it's set to `point-min'.
 At the end, this runs the normal hook `completion-setup-hook'.
 It can find the completion buffer in `standard-output'.
 GROUP-FUN is a `group-function' used for grouping the completion
@@ -2310,9 +2324,15 @@ candidates."
       (goto-char (point-max))
       (when completions-header-format
         (insert (format completions-header-format (length completions))))
-      (completion--insert-strings completions group-fun)))
+      (completion--insert-strings completions group-fun selected)))
 
-  (run-hooks 'completion-setup-hook)
+  ;; Make sure point stays at SELECTED.
+  (let ((marker
+         (when (bufferp standard-output)
+           (with-current-buffer standard-output (point-marker)))))
+    (run-hooks 'completion-setup-hook)
+    (when marker
+      (with-current-buffer standard-output (goto-char marker))))
   nil)
 
 (defvar completion-extra-properties nil
@@ -2428,7 +2448,10 @@ These include:
              ;; window, mark it as softly-dedicated, so bury-buffer in
              ;; minibuffer-hide-completions will know whether to
              ;; delete the window or not.
-             (display-buffer-mark-dedicated 'soft))
+             (display-buffer-mark-dedicated 'soft)
+             (current-completion
+              (when-let ((buf (get-buffer "*Completions*")))
+                (with-current-buffer buf (completions--get-posn (point))))))
         (with-current-buffer-window
           "*Completions*"
           ;; This is a copy of `display-buffer-fallback-action'
@@ -2447,7 +2470,7 @@ These include:
             ,(when temp-buffer-resize-mode
                '(preserve-size . (nil . t)))
             (body-function
-             . ,#'(lambda (_window)
+             . ,#'(lambda (window)
                     (with-current-buffer mainbuf
                       ;; Remove the base-size tail because `sort' requires a properly
                       ;; nil-terminated list.
@@ -2534,7 +2557,8 @@ These include:
                                                      (if (eq (car bounds) (length result))
                                                          'exact 'finished)))))))
 
-                      (display-completion-list completions nil group-fun)))))
+                      (display-completion-list completions nil group-fun current-completion)
+                      (set-window-point window (with-current-buffer standard-output (point)))))))
           nil)))
     nil))
 
@@ -4499,8 +4523,6 @@ insert the selected completion to the minibuffer."
   (let ((auto-choose minibuffer-completion-auto-choose)
          (buf (current-buffer)))
     (with-minibuffer-completions-window
-      (when completions-highlight-face
-        (setq-local cursor-face-highlight-nonselected-window t))
       (next-completion (or n 1))
       (when auto-choose
         (let* ((completion-use-base-affixes t)

@@ -9879,6 +9879,25 @@ Also see the `completion-auto-wrap' variable."
     (when (/= 0 n)
       (switch-to-minibuffer))))
 
+(defun completions--get-posn (position)
+  "Return the completion at POSITION as a string."
+  (save-excursion
+    (goto-char position)
+    (let (beg)
+      (cond
+       ((and (not (eobp))
+             (get-text-property (point) 'completion--string))
+        (setq beg (1+ (point))))
+       ((and (not (bobp))
+             (get-text-property (1- (point)) 'completion--string))
+        (setq beg (point))))
+      (when beg
+        (setq beg (or (previous-single-property-change
+                       beg 'completion--string)
+                      beg))
+        (substring-no-properties
+         (get-text-property beg 'completion--string))))))
+
 (defun choose-completion (&optional event no-exit no-quit)
   "Choose the completion at point.
 If EVENT, use EVENT's position to determine the starting position.
@@ -9898,24 +9917,8 @@ minibuffer, but don't quit the completions window."
           (base-affixes completion-base-affixes)
           (insert-function completion-list-insert-choice-function)
           (completion-no-auto-exit (if no-exit t completion-no-auto-exit))
-          (choice
-           (save-excursion
-             (goto-char (posn-point (event-start event)))
-             (let (beg)
-               (cond
-                ((and (not (eobp))
-                      (get-text-property (point) 'completion--string))
-                 (setq beg (1+ (point))))
-                ((and (not (bobp))
-                      (get-text-property (1- (point)) 'completion--string))
-                 (setq beg (point)))
-                (t (error "No completion here")))
-               (setq beg (or (previous-single-property-change
-                              beg 'completion--string)
-                             beg))
-               (substring-no-properties
-                (get-text-property beg 'completion--string))))))
-
+          (choice (or (completions--get-posn (posn-point (event-start event)))
+                      (error "No completion here"))))
       (unless (buffer-live-p buffer)
         (error "Destination buffer is dead"))
       (unless no-quit
@@ -10087,6 +10090,8 @@ Called from `temp-buffer-show-hook'."
             (base-affixes completion-base-affixes)
             (insert-fun completion-list-insert-choice-function))
         (completion-list-mode)
+        (when completions-highlight-face
+          (setq-local cursor-face-highlight-nonselected-window t))
         (setq-local completion-base-position base-position)
         (setq-local completion-base-affixes base-affixes)
         (setq-local completion-list-insert-choice-function insert-fun))
