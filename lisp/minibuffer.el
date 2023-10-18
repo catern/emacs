@@ -1389,6 +1389,11 @@ pair of a group title string and a list of group candidate strings."
   (if completion-show-inline-help
       (minibuffer-message msg)))
 
+(defun completions--get-selected ()
+  (when-let* ((wind (get-buffer-window "*Completions*" 0))
+              (buf (window-buffer wind)))
+    (with-current-buffer buf (completions--get-posn (point)))))
+
 (defun completion--do-completion (beg end &optional
                                       try-completion-function expect-exact)
   "Do the completion and return a summary of what happened.
@@ -1411,13 +1416,17 @@ EXPECT-EXACT, if non-nil, means that there is no need to tell the user
 when the buffer's text is already an exact match."
   (let* ((string (buffer-substring beg end))
          (md (completion--field-metadata beg))
-         (comp (funcall (or try-completion-function
-                            #'completion-try-completion)
-                        string
-                        minibuffer-completion-table
-                        minibuffer-completion-predicate
-                        (- (point) beg)
-                        md)))
+         (comp
+          (or
+           (when-let (comp (completions--get-selected))
+             (cons comp (length comp)))
+           (funcall (or try-completion-function
+                        #'completion-try-completion)
+                    string
+                    minibuffer-completion-table
+                    minibuffer-completion-predicate
+                    (- (point) beg)
+                    md))))
     (cond
      ((null comp)
       (minibuffer-hide-completions)
@@ -2417,11 +2426,18 @@ displayed."
                  (const :tag "*Completions* updates as you type" t))
   :version "30.1")
 
+(defcustom completions-save-point nil
+  "If non-nil, save the currently selected completion between updates."
+  :type '(choice (const  nil)
+                 (const  t))
+  :version "30.1")
+
 (defun completions--post-command ()
   "Update a displayed *Completions* buffer after a change"
   (when completions-auto-update
     (while-no-input
-      (let ((non-essential t))
+      (let ((non-essential t)
+            (completions-save-point t))
         (when (get-buffer-window "*Completions*" 0)
           (redisplay)
           (if completion-in-region-mode
@@ -2482,9 +2498,7 @@ displayed."
              ;; minibuffer-hide-completions will know whether to
              ;; delete the window or not.
              (display-buffer-mark-dedicated 'soft)
-             (current-completion
-              (when-let ((buf (get-buffer "*Completions*")))
-                (with-current-buffer buf (completions--get-posn (point))))))
+             (current-completion (when completions-save-point (completions--get-selected))))
         (with-current-buffer-window
           "*Completions*"
           ;; This is a copy of `display-buffer-fallback-action'
