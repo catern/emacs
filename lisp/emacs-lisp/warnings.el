@@ -102,8 +102,10 @@ The element must match the first elements of TYPE.
 Thus, (foo bar) as an element matches (foo bar)
 or (foo bar ANYTHING...) as TYPE.
 If TYPE is a symbol FOO, that is equivalent to the list (FOO),
-so only the element (FOO) will match it."
-  :type '(repeat (repeat symbol))
+so only the element (FOO) will match it.
+If this is t, warnings are never logged."
+  :type '(choice (repeat (repeat symbol))
+                 (const :tag "Completely ignore all warnings" t))
   :version "22.1")
 
 ;;;###autoload
@@ -112,13 +114,15 @@ so only the element (FOO) will match it."
 If any element of this list matches the TYPE argument to `display-warning',
 the warning is logged nonetheless, but the warnings buffer is
 not immediately displayed.
+If this is t, the warnings buffer is never displayed.
 The element must match an initial segment of the list TYPE.
 Thus, (foo bar) as an element matches (foo bar)
 or (foo bar ANYTHING...) as TYPE.
 If TYPE is a symbol FOO, that is equivalent to the list (FOO),
 so only the element (FOO) will match it.
 See also `warning-suppress-log-types'."
-  :type '(repeat (repeat symbol))
+  :type '(choice (repeat (repeat symbol))
+                 (const :tag "Never display the warnings buffer" t))
   :version "22.1")
 
 (defcustom warning-display-at-bottom t
@@ -126,6 +130,32 @@ See also `warning-suppress-log-types'."
 The output window will be scrolled to the bottom of the buffer
 to show the last warning message."
   :type 'boolean
+  :version "30.1")
+
+(defcustom warning-to-error-types nil
+  "List of warning types that will be converted to errors.
+If any element of this list matches the TYPE argument to `display-warning',
+`display-warning' signals an error instead of displaying a warning.
+See `warning-suppress-types' for the format of elements in this list.
+If this is t, all warnings are converted to errors.
+See also `warning-signal-errors-during-startup'."
+  :type '(choice (repeat (repeat symbol))
+                 (const :tag "Convert all warnings into errors"))
+  :version "30.1")
+
+(defcustom warning-signal-errors-during-startup nil
+  "Whether to signal errors converted from warnings during startup.
+
+Normally, if Emacs is interactive and not a daemon, then warnings
+generated before init finishes loading are delayed until
+`after-init-hook' runs.  This includes warnings converted into
+errors by `warning-to-error-types': they will be displayed after
+startup completes and not converted into an error.  If you'd
+prefer that these errors be signaled immediately so that the
+context is present during debugging, set this variable to nil."
+  :type '(choice
+          (const :tag "Warnings converted into errors raise after startup" nil)
+          (const :tag "Warnings converted into errors raise immediately" t))
   :version "30.1")
 
 
@@ -185,32 +215,35 @@ message under the control of the string in `warning-levels'.")
 
 (defun warning-suppress-p (type suppress-list)
   "Non-nil if a warning with type TYPE should be suppressed.
-SUPPRESS-LIST is the list of kinds of warnings to suppress."
-  (let (some-match)
-    (dolist (elt suppress-list)
-      (if (symbolp type)
-	  ;; If TYPE is a symbol, the ELT must be (TYPE).
-	  (if (and (consp elt)
-		   (eq (car elt) type)
-		   (null (cdr elt)))
-	      (setq some-match t))
-	;; If TYPE is a list, ELT must match it or some initial segment of it.
-	(let ((tem1 type)
-	      (tem2 elt)
-	      (match t))
-	  ;; Check elements of ELT until we run out of them.
-	  (while tem2
-	    (if (not (equal (car tem1) (car tem2)))
-		(setq match nil))
-	    (setq tem1 (cdr tem1)
-		  tem2 (cdr tem2)))
-	  ;; If ELT is an initial segment of TYPE, MATCH is t now.
-	  ;; So set SOME-MATCH.
-	  (if match
-	      (setq some-match t)))))
-    ;; If some element of SUPPRESS-LIST matched,
-    ;; we return t.
-    some-match))
+SUPPRESS-LIST is the list of kinds of warnings to suppress,
+or t if all warnings should be suppressed."
+  (or (eq suppress-list t)
+      (let (some-match)
+        (dolist (elt suppress-list)
+          (if (symbolp type)
+	      ;; If TYPE is a symbol, the ELT must be (TYPE) or ().
+	      (if (or (null elt)
+                      (and (consp elt)
+		           (eq (car elt) type)
+		           (null (cdr elt))))
+	          (setq some-match t))
+	    ;; If TYPE is a list, ELT must match it or some initial segment of it.
+	    (let ((tem1 type)
+	          (tem2 elt)
+	          (match t))
+	      ;; Check elements of ELT until we run out of them.
+	      (while tem2
+	        (if (not (equal (car tem1) (car tem2)))
+		    (setq match nil))
+	        (setq tem1 (cdr tem1)
+		      tem2 (cdr tem2)))
+	      ;; If ELT is an initial segment of TYPE, MATCH is t now.
+	      ;; So set SOME-MATCH.
+	      (if match
+	          (setq some-match t)))))
+        ;; If some element of SUPPRESS-LIST matched,
+        ;; we return t.
+        some-match)))
 
 (define-icon warnings-suppress button
   `((emoji "⛔")
@@ -242,6 +275,15 @@ SUPPRESS-LIST is the list of kinds of warnings to suppress."
                                   (cons type warning-suppress-types)
                                 (cons (list type) warning-suppress-types))))
     (_ (message "Exiting"))))
+
+(defun warning-to-error (type message level)
+  (unless level
+    (setq level :warning))
+  (let* ((typename (if (consp type) (car type) type))
+         (level-info (assq level warning-levels)))
+    (error (concat (nth 1 level-info) "%s")
+           (format warning-type-format typename)
+           message)))
 
 ;;;###autoload
 (defun display-warning (type message &optional level buffer-name)
@@ -276,6 +318,13 @@ This will also display buttons allowing the user to permanently
 disable automatic display of the warning or disable the warning
 entirely by setting `warning-suppress-types' or
 `warning-suppress-log-types' on their behalf."
+  (when (and (or warning-signal-errors-during-startup
+                 after-init-time noninteractive (daemonp))
+             (>= (warning-numeric-level (or level :warning))
+	         (warning-numeric-level warning-minimum-log-level))
+	     (not (warning-suppress-p type warning-suppress-log-types))
+             (warning-suppress-p type warning-to-error-types))
+    (warning-to-error type message level))
   (if (not (or after-init-time noninteractive (daemonp)))
       ;; Ensure warnings that happen early in the startup sequence
       ;; are visible when startup completes (bug#20792).
