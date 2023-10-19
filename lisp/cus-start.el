@@ -439,6 +439,10 @@ Leaving \"Default\" unchecked is equivalent with specifying a default of
 	     (read-buffer-function minibuffer
 				   (choice (const nil)
 					   function))
+             (read-buffer-sort minibuffer
+                               (choice (const :tag "completions-sort controls sorting" nil)
+                                       (const :tag "sort matching buffer-list" buffer-list))
+                               "30.1")
 	     ;; msdos.c
 	     (dos-unsupported-char-glyph display integer)
 	     ;; nsterm.m

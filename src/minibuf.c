@@ -2186,9 +2186,13 @@ If FLAG is nil, invoke `try-completion'; if it is t, invoke
   else if (EQ (flag, Qlambda))
     return Ftest_completion (string, Vbuffer_alist, predicate);
   else if (EQ (flag, Qmetadata))
-    return list3 (Qmetadata,
-                  Fcons (Qcategory, Qbuffer),
-                  Fcons (Qcycle_sort_function, Qidentity));
+    {
+      Lisp_Object res = list2 (Fcons (Qcategory, Qbuffer),
+			       Fcons (Qcycle_sort_function, Qidentity));
+      if (EQ (Vread_buffer_sort, Qbuffer_list))
+	res = Fcons (Fcons (Qdisplay_sort_function, Qidentity), res);
+      return Fcons (Qmetadata, res);
+    }
   else
     return Qnil;
 }
@@ -2323,6 +2327,7 @@ syms_of_minibuf (void)
   DEFSYM (Qcase_fold_search, "case-fold-search");
   DEFSYM (Qmetadata, "metadata");
   DEFSYM (Qcycle_sort_function, "cycle-sort-function");
+  DEFSYM (Qdisplay_sort_function, "display-sort-function");
 
   /* A frame parameter.  */
   DEFSYM (Qminibuffer_exit, "minibuffer-exit");
@@ -2522,6 +2527,21 @@ If this is nil, window configurations are not restored upon exiting
 the minibuffer.  However, if `minibuffer-restore-windows' is present
 in `minibuffer-exit-hook', exiting the minibuffer will remove the window
 showing the *Completions* buffer, if any.  */);
+
+  DEFVAR_LISP ("read-buffer-sort", Vread_buffer_sort,
+	       doc: /* Non-nil means sort completions in `read-buffer'.
+
+If this is nil (the default), completions in `read-buffer' are sorted
+according to `completions-sort'.
+
+If this is `buffer-list', completions are sorted to match the order of
+`buffer-list'.
+
+This variable only affects the default `read-buffer', so if
+`read-buffer-function' is set to a function which does not use
+`internal-complete-buffer', this variable will have no effect.*/);
+  Vread_buffer_sort = Qnil;
+
   read_minibuffer_restore_windows = true;
 
   defsubr (&Sactive_minibuffer_window);
