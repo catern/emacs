@@ -6038,8 +6038,11 @@ This function is called directly from the C code."
 (defun display-delayed-warnings ()
   "Display delayed warnings from `delayed-warnings-list'.
 Used from `delayed-warnings-hook' (which see)."
-  (dolist (warning (nreverse delayed-warnings-list))
-    (apply #'display-warning warning))
+  ;; There's no point in converting to errors now, since the warnings
+  ;; have already been delayed out of their original context.
+  (let ((warning-to-error-types nil))
+    (dolist (warning (nreverse delayed-warnings-list))
+      (apply #'display-warning warning)))
   (setq delayed-warnings-list nil))
 
 (defun collapse-delayed-warnings ()
