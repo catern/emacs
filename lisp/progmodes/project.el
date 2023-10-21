@@ -1150,9 +1150,16 @@ PREDICATE and HIST have the same meaning as in `completing-read'.
 MB-DEFAULT is used as part of \"future history\", to be inserted
 by the user at will."
   (let* ((common-parent-directory
-          (let ((common-prefix (try-completion "" all-files)))
-            (if (> (length common-prefix) 0)
-                (file-name-directory common-prefix))))
+          (let* ((common-prefix (try-completion "" all-files))
+                 (root (project-root (project-current)))
+                 (expand-root (expand-file-name root))
+                 (abbrev-root (abbreviate-file-name root)))
+            (cond
+             ;; We try use the project-root even if all the files have
+             ;; a c-p-d below the project-root.
+             ((string-prefix-p expand-root common-prefix) expand-root)
+             ((string-prefix-p abbrev-root common-prefix) abbrev-root)
+             ((> (length common-prefix) 0) (file-name-directory common-prefix)))))
          (cpd-length (length common-parent-directory))
          (common-parent-directory (if (file-name-absolute-p (car all-files))
                                       common-parent-directory
