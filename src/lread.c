@@ -2329,8 +2329,8 @@ readevalloop_1 (int old)
 static AVOID
 end_of_file_error (void)
 {
-  if (STRINGP (Vload_true_file_name))
-    xsignal1 (Qend_of_file, Vload_true_file_name);
+  if (!NILP (Vread_end_of_file_name))
+    xsignal1 (Qend_of_file, Vread_end_of_file_name);
 
   xsignal0 (Qend_of_file);
 }
@@ -2434,6 +2434,8 @@ readevalloop (Lisp_Object readcharfun,
   while (continue_reading_p)
     {
       specpdl_ref count1 = SPECPDL_INDEX ();
+      if (NILP (Vread_end_of_file_name))
+	specbind (Qread_end_of_file_name, Vload_true_file_name);
 
       if (b != 0 && !BUFFER_LIVE_P (b))
 	error ("Reading from killed buffer");
@@ -2529,7 +2531,7 @@ readevalloop (Lisp_Object readcharfun,
       if (!NILP (start) && continue_reading_p)
 	start = Fpoint_marker ();
 
-      /* Restore saved point and BEGV.  */
+      /* Restore saved point and BEGV, and unbind read_stream_for_error.  */
       unbind_to (count1, Qnil);
 
       /* Now eval what we just read.  */
@@ -5962,6 +5964,12 @@ the .eln filename.  */);
   DEFVAR_LISP ("load-true-file-name", Vload_true_file_name,
 	       doc: /* Full name of file being loaded by `load'.  */);
   Vload_true_file_name = Qnil;
+
+  DEFVAR_LISP ("read-end-of-file-name", Vread_end_of_file_name,
+	       doc: /* String to be included when `read' signals `end-of-file'.
+When loading a file, this is bound to the filename.  */);
+  Vread_end_of_file_name = Qnil;
+  DEFSYM (Qread_end_of_file_name, "read-end-of-file-name");
 
   DEFVAR_LISP ("user-init-file", Vuser_init_file,
 	       doc: /* File name, including directory, of user's initialization file.
