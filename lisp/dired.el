@@ -3493,8 +3493,11 @@ As a side effect, killed dired buffers for DIR are removed from
         (setq result (cons buf result)))))
     result))
 
-(defun dired-glob-regexp (pattern)
-  "Convert glob-pattern PATTERN to a regular expression."
+(defun dired-glob-regexp (pattern &optional noanchor)
+  "Convert glob-pattern PATTERN to a regular expression.
+
+If NOANCHOR is non-nil, the regular expression is not anchored to
+match an entire string."
   (let ((matched-in-pattern 0)  ;; How many chars of PATTERN we've handled.
 	regexp)
     (while (string-match "[[?*]" pattern matched-in-pattern)
@@ -3521,11 +3524,11 @@ As a side effect, killed dired buffers for DIR are removed from
 	      ((= next-op ?*)
 	       (setq regexp (concat regexp ".*"))
 	       (setq matched-in-pattern op-end)))))
-    (concat "\\`"
+    (concat (unless noanchor "\\`")
 	    regexp
 	    (regexp-quote
 	     (substring pattern matched-in-pattern))
-	    "\\'")))
+            (unless noanchor "\\'"))))
 
 (defun dired-advertise ()
   ;;"Advertise in variable `dired-buffers' that we dired `default-directory'."
