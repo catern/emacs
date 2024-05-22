@@ -255,6 +255,15 @@ to determine whether cdr should not be excluded."
   :type '(choice (repeat :tag "Ignored file" string)
 		 (const :tag "No ignored files" nil)))
 
+(defcustom grep-find-optimize-ignores t
+  "If non-nil, optimize ignores when building commands for `rgrep'.
+
+Instead of passing individual \"-path\" and \"-name\" arguments for each
+element in `grep-find-ignored-directories' and
+`grep-find-ignored-files', construct a single \"-regex\" argument for
+each, which substantially improves performance."
+  :type 'boolean)
+
 (defcustom grep-save-buffers 'ask
   "If non-nil, save buffers before running the grep commands.
 If `ask', ask before saving.  If a function, call it with no arguments
@@ -1197,6 +1206,45 @@ REGEXP is used as a string in the prompt."
   "Return the list of ignored files applicable to DIR."
   (grep--filter-list-by-dir grep-find-ignored-files dir))
 
+(defun grep--globs-to-path-forms (globs)
+  "Return an `rx' form which matches a path ending in any of GLOBS."
+  (require 'dired)
+  (declare-function dired-glob-regexp "dired" (pattern))
+  (let (rx-forms)
+    (let (literals suffixes)
+      (dolist (glob globs)
+        (cond
+         ((not (string-match "[[?*]" glob 0))
+          ;; The glob is just a literal string.
+          (push glob literals))
+         ((and
+           (not (string-empty-p glob))
+           (not (string-match "[[?*]" glob 1))
+           (eq (aref glob 0) ?*))
+          ;; The glob is * followed by a literal string.  This handles the
+          ;; elements of `grep-find-ignored-files' which come from
+          ;; `completion-ignored-extensions'.
+          (push (substring glob 1) suffixes))
+         (t
+          ;; The glob is something else more complex.
+          (push `(regexp ,(dired-glob-regexp glob 'noanchor)) rx-forms))))
+      ;; `rx' handles calling regexp-opt for us when we use 'or with only
+      ;; literal strings.
+      (when literals
+        (push `(or . ,literals) rx-forms))
+      (when suffixes
+        (push `(seq (* any) (or . ,suffixes)) rx-forms)))
+    `(seq (* any) "/" (or . ,rx-forms))))
+
+(defun grep--globs-to-path-regex (globs)
+  "Return regular expression which matches a path ending in any of GLOBS.
+
+Globs which are just literal strings or are of the form \"*string\" are
+optimized by `regexp-opt'."
+  (let ((rx-bracket-open "\\(")
+        (regexp-opt-shy-group-open "\\("))
+    (rx-to-string (grep--globs-to-path-forms globs) 'nogroup)))
+
 ;;;###autoload
 (defun lgrep (regexp &optional files dir confirm)
   "Run grep, searching for REGEXP in FILES in directory DIR.
@@ -1388,28 +1436,36 @@ to indicate whether the grep should be case sensitive or not."
    (concat
     (when-let ((ignored-dirs (rgrep-find-ignored-directories dir)))
       (concat "-type d "
-              (shell-quote-argument "(" grep-quoting-style)
-              ;; we should use shell-quote-argument here
-              " -path "
-              (mapconcat
-               (lambda (d)
-                 (shell-quote-argument (concat "*/" d) grep-quoting-style))
-               ignored-dirs
-               " -o -path ")
-              " "
-              (shell-quote-argument ")" grep-quoting-style)
+              (if grep-find-optimize-ignores
+                  (concat " -regex " (shell-quote-argument
+                                      (grep--globs-to-path-regex ignored-dirs) grep-quoting-style))
+                (concat
+                 (shell-quote-argument "(" grep-quoting-style)
+                 ;; we should use shell-quote-argument here
+                 " -path "
+                 (mapconcat
+                  (lambda (d)
+                    (shell-quote-argument (concat "*/" d) grep-quoting-style))
+                  ignored-dirs
+                  " -o -path ")
+                 " "
+                 (shell-quote-argument ")" grep-quoting-style)))
               " -prune -o "))
     (when-let ((ignored-files (grep-find-ignored-files dir)))
       (concat (shell-quote-argument "!" grep-quoting-style) " -type d "
-              (shell-quote-argument "(" grep-quoting-style)
-              ;; we should use shell-quote-argument here
-              " -name "
-              (mapconcat
-               (lambda (ignore) (shell-quote-argument ignore grep-quoting-style))
-               ignored-files
-               " -o -name ")
-              " "
-              (shell-quote-argument ")" grep-quoting-style)
+              (if grep-find-optimize-ignores
+                  (concat " -regex " (shell-quote-argument
+                                      (grep--globs-to-path-regex ignored-files) grep-quoting-style))
+                (concat
+                 (shell-quote-argument "(" grep-quoting-style)
+                 ;; we should use shell-quote-argument here
+                 " -name "
+                 (mapconcat
+                  (lambda (ignore) (shell-quote-argument ignore grep-quoting-style))
+                  ignored-files
+                  " -o -name ")
+                 " "
+                 (shell-quote-argument ")" grep-quoting-style)))
               " -prune -o ")))))
 
 (defun grep-find-toggle-abbreviation ()

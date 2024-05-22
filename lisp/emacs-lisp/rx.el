@@ -224,8 +224,10 @@ Each entry is:
   "Bracket REXP by LEFT-STR and RIGHT-STR."
   (append (list left-str) rexp (list right-str)))
 
+(defvar rx-bracket-open "\\(?:")
+
 (defun rx--bracket (rexp)
-  (rx--enclose "\\(?:" rexp "\\)"))
+  (rx--enclose rx-bracket-open rexp "\\)"))
 
 (defun rx--sequence (left right)
   "Return the sequence (concatenation) of two translated items,

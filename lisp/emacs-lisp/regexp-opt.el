@@ -83,6 +83,8 @@
 
 ;;; Code:
 
+(defvar regexp-opt-shy-group-open "\\(?:")
+
 ;;;###autoload
 (defun regexp-opt (strings &optional paren)
   "Return a regexp to match a string in the list STRINGS.
@@ -143,7 +145,7 @@ usually more efficient than that of a simplified version:
                     (delete-dups (sort (copy-sequence strings) 'string-lessp))
                     (or open t) (not open))
                  ;; No strings: return an unmatchable regexp.
-                 (concat (or open "\\(?:") regexp-unmatchable "\\)"))))
+                 (concat (or open regexp-opt-shy-group-open) regexp-unmatchable "\\)"))))
       (cond ((eq paren 'words)
 	     (concat "\\<" re "\\>"))
 	    ((eq paren 'symbols)
@@ -185,7 +187,7 @@ Merges keywords to avoid backtracking in Emacs's regexp matcher."
   ;; Also we delay the addition of grouping parenthesis as long as possible
   ;; until we're sure we need them, and try to remove one-character sequences
   ;; so we can use character sets rather than grouping parenthesis.
-  (let* ((open-group (cond ((stringp paren) paren) (paren "\\(?:") (t "")))
+  (let* ((open-group (cond ((stringp paren) paren) (paren regexp-opt-shy-group-open) (t "")))
 	 (close-group (if paren "\\)" ""))
 	 (open-charset (if lax "" open-group))
 	 (close-charset (if lax "" close-group)))
