@@ -1141,7 +1141,15 @@ and DOC describes the way this style of completion works.")
     ;; and simply add "bar" to the end of the result.
     emacs22)
   "List of completion styles to use.
-The available styles are listed in `completion-styles-alist'.
+An element should be a symbol which is listed in
+`completion-styles-alist'.
+
+An element can also be a list of the form
+(STYLE ((VARIABLE VALUE) ...))
+STYLE must be a symbol listed in `completion-styles-alist', followed by
+a `let'-style list of variable/value pairs.  VARIABLE will be bound to
+VALUE (without evaluating it) while the style is handling completion.
+This allows repeating the same style with different configurations.
 
 Note that `completion-category-overrides' may override these
 styles for specific categories, such as files, buffers, etc."
@@ -1284,11 +1292,18 @@ overrides the default specified in `completion-category-defaults'."
          (result-and-style
           (seq-some
            (lambda (style)
-             (let ((probe (funcall
-                           (or (nth n (assq style completion-styles-alist))
-                               (error "Invalid completion style %s" style))
-                           string table pred point)))
-               (and probe (cons probe style))))
+             (let (symbols values)
+               (when (consp style)
+                 (dolist (binding (cadr style))
+                   (push (car binding) symbols)
+                   (push (cadr binding) values))
+                 (setq style (car style)))
+               (cl-progv symbols values
+                 (let ((probe (funcall
+                               (or (nth n (assq style completion-styles-alist))
+                                   (error "Invalid completion style %s" style))
+                               string table pred point)))
+                   (and probe (cons probe style))))))
            (completion--styles md)))
          (adjust-fn (get (cdr result-and-style) 'completion--adjust-metadata)))
     (when (and adjust-fn metadata)
@@ -3870,6 +3885,21 @@ the commands start with a \"-\" or a SPC."
 	     (setq trivial nil)))
 	 trivial)))
 
+(defcustom completion-pcm-leading-wildcard nil
+  "If non-nil, partial-completion completes as if there's a leading wildcard.
+
+If nil (the default), the partial-completion style completes a string
+like \"o/t\" as if it was \"o*/t*\".  This means \"one/two\" is a valid
+completion, but not \"zero/one/two\" or \"zeroone/two\".
+
+If non-nil, the partial-completion style completes \"o/t\" as if it was
+\"*o*/t*\".  This means \"one/two\", \"zero/one/two\" and
+\"zeroone/two\" are all valid completions.  Note that this can be slower
+to compute since less filtering of the completion candidates is
+possible."
+  :version "30.1"
+  :type 'boolean)
+
 (defun completion-pcm--string->pattern (string &optional point)
   "Split STRING into a pattern.
 A pattern is a list where each element is either a string
@@ -3920,7 +3950,11 @@ or a symbol, see `completion-pcm--merge-completions'."
       (when (> (length string) p0)
         (if pending (push pending pattern))
         (push (substring string p0) pattern))
-      (nreverse pattern))))
+      (setq pattern (nreverse pattern))
+      (when completion-pcm-leading-wildcard
+        (when (stringp (car pattern))
+          (push 'prefix pattern)))
+      pattern)))
 
 (defun completion-pcm--optimize-pattern (p)
   ;; Remove empty strings in a separate phase since otherwise a ""
