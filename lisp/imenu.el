@@ -825,7 +825,9 @@ Returns t for rescan and otherwise an element or subelement of INDEX-ALIST."
 	    (new-prefix (and concat-names
 			     (if prefix
 				 (concat prefix imenu-level-separator name)
-			       name))))
+			       (if (eq imenu-flatten 'annotation)
+                                   (propertize name 'imenu-choice item)
+                                 name)))))
        (cond
 	((not (imenu--subalist-p item))
 	 (list (cons (pcase imenu-flatten
