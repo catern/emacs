@@ -1817,6 +1817,7 @@ usage: (make-process &rest ARGS)  */)
 {
   Lisp_Object buffer, command, program, proc, contact, current_dir, tem;
   Lisp_Object xstderr, stderrproc;
+  Lisp_Object inputproc;
   specpdl_ref count = SPECPDL_INDEX ();
 
   if (nargs == 0)
@@ -1877,6 +1878,13 @@ usage: (make-process &rest ARGS)  */)
 			  query_on_exit ? Qnil : Qt);
     }
 
+  inputproc = plist_get (contact, QCinput);
+  if (!NILP (inputproc))
+    {
+      if (!PROCESSP (inputproc))
+	error (":input must be a process");
+    }
+
   proc = make_process (name);
   record_unwind_protect (start_process_unwind, proc);
 
@@ -1909,6 +1917,7 @@ usage: (make-process &rest ARGS)  */)
 
   if (!NILP (stderrproc))
     pset_stderrproc (XPROCESS (proc), stderrproc);
+  (XPROCESS (proc))->inputproc = inputproc;
 
 #ifdef HAVE_GNUTLS
   /* AKA GNUTLS_INITSTAGE(proc).  */
@@ -2187,6 +2196,11 @@ create_process (Lisp_Object process, char **new_argv, Lisp_Object current_dir)
       p->open_fd[SUBPROCESS_STDIN] = forkin = pty_tty;
       outchannel = ptychannel;
     }
+  else if (!NILP (p->inputproc))
+    {
+      struct Lisp_Process *pp = XPROCESS (p->inputproc);
+      forkin = pp->open_fd[READ_FROM_SUBPROCESS];
+    }
   else
     {
       if (emacs_pipe (p->open_fd + SUBPROCESS_STDIN) != 0)
@@ -2323,6 +2337,11 @@ create_process (Lisp_Object process, char **new_argv, Lisp_Object current_dir)
 	{
 	  struct Lisp_Process *pp = XPROCESS (p->stderrproc);
 	  close_process_fd (&pp->open_fd[SUBPROCESS_STDOUT]);
+	}
+      if (!NILP (p->inputproc))
+	{
+	  struct Lisp_Process *pp = XPROCESS (p->inputproc);
+	  close_process_fd (&pp->open_fd[READ_FROM_SUBPROCESS]);
 	}
     }
 }
@@ -8791,6 +8810,7 @@ syms_of_process (void)
   DEFSYM (QCcommand, ":command");
   DEFSYM (QCconnection_type, ":connection-type");
   DEFSYM (QCstderr, ":stderr");
+  DEFSYM (QCinput, ":input");
   DEFSYM (Qpty, "pty");
   DEFSYM (Qpipe, "pipe");
 

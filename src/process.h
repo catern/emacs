@@ -117,6 +117,9 @@ struct Lisp_Process
 
     /* The thread a process is linked to, or nil for any thread.  */
     Lisp_Object thread;
+
+    /* Pipe process attached to the standard error of this process.  */
+    Lisp_Object inputproc;
     /* After this point, there are no Lisp_Objects.  */
 
     /* Process ID.  A positive value is a child process ID.

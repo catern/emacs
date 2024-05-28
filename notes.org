@@ -1,0 +1,51 @@
+* support :input in make-process
+okay so i'm passing down the read-from-subprocess side of the pipe to a second cat,
+but the first cat is closing for some reason.
+
+why is that.
+
+oh maybe this is related to the fact that I can't write input to the process?
+
+I haven't done anything to deal with that...
+
+oho.
+
+the outchannel or something, may be broken.
+yes we're setting p->outfd = -1
+
+what does outfd look like in a pipe process after it's been passed down?
+
+maybe I should also pass down a pipe process so I can see that...
+
+hm.
+HM.
+
+oh hmmm hm.
+
+how's all this work?
+
+should I be able to write to the process even though I've passed something else as input?
+
+I guess there's no reason not to allow that.
+
+oh, but then the pipeline gets confused... because there's no EOF.
+
+anyway the main question is, how the heck do pipe processes work
+
+oh! can I not actually write to a pipe process and get the same thing back out?
+
+yeaaaah that's probably the case.
+
+and then...
+when I pass a pipe process as stderr...
+
+hm, I close the input, but what happens if I then try to write?
+
+aha I get EBADF lol:
+Writing to process: Bad file descriptor, pipe
+
+okay fine sure.
+BUT, why is emacs itself not getting that, when monitoring the... outfd?
+
+** TODO oh, let's try passing a pipe process as input instead of another cat
+that should be more reliable
