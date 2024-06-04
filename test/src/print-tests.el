@@ -414,8 +414,8 @@ otherwise, use a different charset."
 
 (ert-deftest test-dots ()
   (should (equal (prin1-to-string 'foo.bar) "foo.bar"))
-  (should (equal (prin1-to-string '.foo) "\\.foo"))
-  (should (equal (prin1-to-string '.foo.) "\\.foo."))
+  (should (equal (prin1-to-string '.foo) ".foo"))
+  (should (equal (prin1-to-string '.foo.) ".foo."))
   (should (equal (prin1-to-string 'bar?bar) "bar?bar"))
   (should (equal (prin1-to-string '\?bar) "\\?bar"))
   (should (equal (prin1-to-string '\?bar?) "\\?bar?")))
