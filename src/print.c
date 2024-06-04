@@ -2437,10 +2437,14 @@ print_object (Lisp_Object obj, Lisp_Object printcharfun, bool escapeflag)
 	  ((c_isdigit (p[signedp]) || p[signedp] == '.')
 	   && !NILP (string_to_number (p, 10, &len))
 	   && len == size_byte)
-	  /* We don't escape "." or "?" (unless they're the first
-	     character in the symbol name).  */
+	  /* We don't escape "?" unless it's the first character in the
+	     symbol name.  */
 	  || *p == '?'
-	  || *p == '.';
+	  /* "." only needs to be escaped if that's the entire symbol or
+	     the following character is invalid. */
+	  || (*p == '.' &&
+	      (size_byte == 1
+	       || INVALID_SYNTAX_WHEN_AFTER_DOT (*(p+1)))) ;
 
 	if (! NILP (Vprint_gensym)
 	    && !SYMBOL_INTERNED_IN_INITIAL_OBARRAY_P (obj))

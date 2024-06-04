@@ -611,6 +611,15 @@ char_hexdigit (int c)
   return 0 <= c && c <= UCHAR_MAX ? hexdigit[c] - 1 : -1;
 }
 
+INLINE bool
+INVALID_SYNTAX_WHEN_AFTER_DOT (int nch)
+{
+  return (nch <= 32 || nch == NO_BREAK_SPACE
+	  || nch == '"' || nch == '\'' || nch == ';'
+	  || nch == '(' || nch == '[' || nch == '#'
+	  || nch == '?' || nch == '`' || nch == ',');
+}
+
 INLINE_HEADER_END
 
 #endif /* EMACS_CHARACTER_H */

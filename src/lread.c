@@ -4351,10 +4351,7 @@ read0 (Lisp_Object readcharfun, bool locate_syms)
       {
 	int nch = READCHAR;
 	UNREAD (nch);
-	if (nch <= 32 || nch == NO_BREAK_SPACE
-	    || nch == '"' || nch == '\'' || nch == ';'
-	    || nch == '(' || nch == '[' || nch == '#'
-	    || nch == '?' || nch == '`' || nch == ',')
+	if (INVALID_SYNTAX_WHEN_AFTER_DOT (nch))
 	  {
 	    if (!read_stack_empty_p (base_sp)
 		&& read_stack_top ()->type ==  RE_list)
