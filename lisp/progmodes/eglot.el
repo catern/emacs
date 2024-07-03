@@ -7,7 +7,7 @@
 ;; Maintainer: João Távora <joaotavora@gmail.com>
 ;; URL: https://github.com/joaotavora/eglot
 ;; Keywords: convenience, languages
-;; Package-Requires: ((emacs "26.3") (compat "27.1") (eldoc "1.14.0") (external-completion "0.1") (flymake "1.2.1") (jsonrpc "1.0.24") (project "0.9.8") (seq "2.23") (track-changes "1.2") (xref "1.6.2"))
+;; Package-Requires: ((emacs "26.3") (compat "27.1") (eldoc "1.14.0") (external-completion "0.1") (flymake "1.2.1") (jsonrpc "1.0.24") (project "0.11.0") (seq "2.23") (track-changes "1.2") (xref "1.6.2"))
 
 ;; This is a GNU ELPA :core package.  Avoid adding functionality
 ;; that is not available in the version of Emacs recorded above or any
@@ -2029,6 +2029,8 @@ Use `eglot-managed-p' to determine if current buffer is managed.")
     (eglot--setq-saving company-tooltip-align-annotations t)
     (eglot--setq-saving eldoc-documentation-strategy
                         #'eldoc-documentation-compose)
+    (when (member '(project-mode-line project-mode-line-format) mode-line-format)
+      (setq-local project-mode-line t))
     (unless (eglot--stay-out-of-p 'imenu)
       (add-function :before-until (local 'imenu-create-index-function)
                     #'eglot-imenu))
@@ -2164,10 +2166,24 @@ If it is activated, also signal textDocument/didOpen."
       (package-delete existing t))
     (package-install (cadr (assoc 'eglot package-archive-contents)))))
 
+(easy-menu-define eglot-server-menu nil "Monitor server communication"
+  '("Debugging the server communication"
+    ["Reconnect to server" eglot-reconnect]
+    ["Quit server" eglot-shutdown]
+    "--"
+    ["LSP events buffer" eglot-events-buffer]
+    ["Server stderr buffer" eglot-stderr-buffer]
+    ["Customize event buffer size"
+     (lambda ()
+       (interactive)
+       (customize-variable 'eglot-events-buffer-size))]))
+
 (easy-menu-define eglot-menu nil "Eglot"
   `("Eglot"
     ;; Commands for getting information and customization.
     ["Customize Eglot" (lambda () (interactive) (customize-group "eglot"))]
+    ["Server" eglot-server-menu
+     :active (eglot-current-server)]
     "--"
     ;; xref like commands.
     ["Find definitions" xref-find-definitions
@@ -2214,18 +2230,6 @@ If it is activated, also signal textDocument/didOpen."
     ["Quickfix" eglot-code-action-quickfix
      :visible (eglot-server-capable :codeActionProvider)]))
 
-(easy-menu-define eglot-server-menu nil "Monitor server communication"
-  '("Debugging the server communication"
-    ["Reconnect to server" eglot-reconnect]
-    ["Quit server" eglot-shutdown]
-    "--"
-    ["LSP events buffer" eglot-events-buffer]
-    ["Server stderr buffer" eglot-stderr-buffer]
-    ["Customize event buffer size"
-     (lambda ()
-       (interactive)
-       (customize-variable 'eglot-events-buffer-size))]))
-
 (defun eglot--mode-line-props (thing face defs &optional prepend)
   "Helper for function `eglot--mode-line-format'.
 Uses THING, FACE, DEFS and PREPEND."
@@ -2264,28 +2268,28 @@ Uses THING, FACE, DEFS and PREPEND."
            'help-echo (format "Project '%s'\nmouse-1: LSP server control menu" nick)
            'keymap (let ((map (make-sparse-keymap)))
                      (define-key map [mode-line down-mouse-1] eglot-server-menu)
-                     map))
-         ,@(when last-error
-             `("/" ,(eglot--mode-line-props
-                     "error" 'compilation-mode-line-fail
-                     '((mouse-3 eglot-clear-status  "Clear this status"))
-                     (format "An error occurred: %s\n" (plist-get last-error
-                                                                  :message)))))
-         ,@(when (cl-plusp pending)
-             `("/" ,(eglot--mode-line-props
-                     (format "%d" pending) 'warning
-                     '((mouse-3 eglot-forget-pending-continuations
-                                "Forget pending continuations"))
-                     "Number of outgoing, \
+                     map))))
+     (when last-error
+       `("/" ,(eglot--mode-line-props
+               "error" 'compilation-mode-line-fail
+               '((mouse-3 eglot-clear-status  "Clear this status"))
+               (format "An error occurred: %s\n" (plist-get last-error
+                                                            :message)))))
+     (when (cl-plusp pending)
+       `("/" ,(eglot--mode-line-props
+               (format "%d" pending) 'warning
+               '((mouse-3 eglot-forget-pending-continuations
+                          "Forget pending continuations"))
+               "Number of outgoing, \
 still unanswered LSP requests to the server\n")))
-         ,@(cl-loop for pr hash-values of (eglot--progress-reporters server)
-                    when (eq (car pr)  'eglot--mode-line-reporter)
-                    append `("/" ,(eglot--mode-line-props
-                                   (format "%s%%%%" (or (nth 4 pr) "?"))
-                                   'eglot-mode-line
-                                   nil
-                                   (format "(%s) %s %s" (nth 1 pr)
-                                           (nth 2 pr) (nth 3 pr))))))))))
+     (cl-loop for pr hash-values of (eglot--progress-reporters server)
+              when (eq (car pr)  'eglot--mode-line-reporter)
+              append `("/" ,(eglot--mode-line-props
+                             (format "%s%%%%" (or (nth 4 pr) "?"))
+                             'eglot-mode-line
+                             nil
+                             (format "(%s) %s %s" (nth 1 pr)
+                                     (nth 2 pr) (nth 3 pr))))))))
 
 (add-to-list 'mode-line-misc-info
              `(eglot--managed-mode (" [" eglot--mode-line-format "] ")))
