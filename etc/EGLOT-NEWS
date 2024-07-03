@@ -26,6 +26,14 @@ Eglot will now try to not register $/progress messages from the server
 when the defcustom is set to nil.  This requires a restart of the server
 for the change to take effect.
 
+** Mode line entry now uses project-mode-line for project name
+
+In buffers managed by Eglot, the mode line has always contained the
+project-name of that buffer's project (usually the basename of the VCS
+root directory).  Previously project-name was part of Eglot's mode line
+entry; now project-name is in a separate entry provided by
+project-mode-line.
+
 ** LSP MarkedString interface is now supported (bug#71353)
 
 Some servers still use this deprecated interface for communicating
