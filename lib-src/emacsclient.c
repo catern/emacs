@@ -1480,7 +1480,7 @@ local_sockname (int s, char sockname[socknamesize], int tmpdirlen,
    Otherwise, the local socket name is SERVER_NAME.  */
 
 static HSOCKET
-set_local_socket (char const *server_name)
+set_local_socket (char const *server_name, bool use_xdg_runtime_dir)
 {
   union local_sockaddr server;
   int sock_status;
@@ -1510,7 +1510,7 @@ set_local_socket (char const *server_name)
 #ifndef HAVE_ANDROID
       /* socket_name is a file name component.  */
       char const *xdg_runtime_dir = egetenv ("XDG_RUNTIME_DIR");
-      if (xdg_runtime_dir)
+      if (use_xdg_runtime_dir && xdg_runtime_dir)
 	{
 	  socknamelen = snprintf (sockname, socknamesize, "%s/emacs/%s",
 				  xdg_runtime_dir, server_name);
@@ -1667,7 +1667,7 @@ set_socket (bool no_exit_if_error)
   if (socket_name)
     {
       /* Explicit --socket-name argument, or environment variable.  */
-      s = set_local_socket (socket_name);
+      s = set_local_socket (socket_name, true);
       if (s != INVALID_SOCKET || no_exit_if_error)
 	return s;
       message (true, "%s: error accessing socket \"%s\"\n",
@@ -1693,7 +1693,10 @@ set_socket (bool no_exit_if_error)
 
 #ifdef SOCKETS_IN_FILE_SYSTEM
   /* Implicit local socket.  */
-  s = set_local_socket ("server");
+  s = set_local_socket ("server", true);
+  if (s != INVALID_SOCKET)
+    return s;
+  s = set_local_socket ("server", false);
   if (s != INVALID_SOCKET)
     return s;
 #endif
