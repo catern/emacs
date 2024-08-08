@@ -1582,7 +1582,8 @@ Return t if the file exists and loads successfully.  */)
                 }
 
               if (result == 0
-                  && timespec_cmp (get_stat_mtime (&s1), get_stat_mtime (&s2)) < 0)
+                  && timespec_cmp (get_stat_mtime (&s1), get_stat_mtime (&s2)) < 0
+		  && !getenv("JANE_EMACS_SUPPRESS_SOURCE_NEWER_THAN_BYTE_COMPILED_WARNING"))
                 {
                   /* Make the progress messages mention that source is newer.  */
                   newer = 1;
