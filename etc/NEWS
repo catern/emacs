@@ -103,6 +103,11 @@ expression, which is useful when those arguments contain arbitrary
 characters that otherwise might require elaborate and error-prone
 escaping (to protect them from the shell).
 
+** Project
+
+New command `project-find-file-in-root` which is equivalent to running
+‘project-any-command’ with ‘find-file’.
+
 
 * Incompatible Changes in Emacs 30.1
 
