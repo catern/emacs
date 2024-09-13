@@ -1512,6 +1512,12 @@ If LIMIT is a revision string, use it as an end-revision."
                   (list "-p"))
 		'("--")))))))
 
+(defun vc-git-pushed-revision (_file &optional remote-location)
+  "Return the ref for REMOTE-LOCATION."
+  (if (and remote-location (not (string-empty-p remote-location)))
+      remote-location
+    "@{upstream}"))
+
 (defun vc-git-log-outgoing (buffer remote-location)
   (vc-setup-buffer buffer)
   (apply #'vc-git-command buffer 'async nil
@@ -1520,9 +1526,7 @@ If LIMIT is a revision string, use it as an end-revision."
            ,(format "--pretty=tformat:%s" (car vc-git-root-log-format))
            "--abbrev-commit"
            ,@(ensure-list vc-git-shortlog-switches)
-           ,(concat (if (string= remote-location "")
-	                "@{upstream}"
-	              remote-location)
+           ,(concat (vc-git-pushed-revision nil remote-location)
 	            "..HEAD"))))
 
 (defun vc-git-log-incoming (buffer remote-location)

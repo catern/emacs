@@ -1422,6 +1422,12 @@ This runs the command \"hg summary\"."
   (vc-hg-command buffer 1 nil "incoming" "-n" (unless (string= remote-location "")
 						remote-location)))
 
+(defun vc-hg-pushed-revision (_file &optional remote-location)
+  "Return a revspec for the last commit not outgoing to REMOTE-LOCATION."
+  (unless remote-location
+    (setq remote-location ""))
+  (format "last(. and not outgoing(%s))" remote-location))
+
 (defun vc-hg-log-outgoing (buffer remote-location)
   (vc-setup-buffer buffer)
   (vc-hg-command buffer 1 nil "outgoing" "-n" (unless (string= remote-location "")
