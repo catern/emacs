@@ -2061,6 +2061,11 @@ MULTIPLE.  The arguments PROMPT, FILES, BACKEND, DEFAULT and
 INITIAL-INPUT are passed on to `vc-read-revision' directly."
   (vc-read-revision prompt files backend default initial-input t))
 
+(defun vc-default-pushed-revision (_file &optional _remote-location)
+  "Return the last pushed revision of FILE.
+The default is to return nil always."
+  nil)
+
 (defun vc-diff-build-argument-list-internal (&optional fileset)
   "Build argument list for calling internal diff functions."
   (let* ((vc-fileset (or fileset (vc-deduce-fileset t))) ;FIXME: why t?  --Stef
@@ -2069,6 +2074,8 @@ INITIAL-INPUT are passed on to `vc-read-revision' directly."
          (first (car files))
          (rev1-default nil)
          ) ;; (rev2-default nil)
+    (when-let ((pushed-revision (vc-call-backend backend 'pushed-revision first)))
+      (push pushed-revision rev1-default))
     (cond
      ;; someday we may be able to do revision completion on non-singleton
      ;; filesets, but not yet.
