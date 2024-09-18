@@ -3771,10 +3771,20 @@ Like `internal-complete-buffer', but removes BUFFER from the completion list."
           (setq suffix (substring suffix 1)))
       (cons (concat completion suffix) (length completion))))))
 
+(defface completions-ignored
+  '((t (:inherit shadow)))
+  "Face for text which was ignored by the completion style.")
+
 (defun completion-emacs22-all-completions (string table pred point)
-  (let ((beforepoint (substring string 0 point)))
+  (let ((beforepoint (substring string 0 point))
+        (suffix (propertize (substring string point) 'face 'completions-ignored)))
     (completion-hilit-commonality
-     (all-completions beforepoint table pred)
+     (mapcar
+      (lambda (elem)
+        (let ((s (concat elem suffix)))
+          (put-text-property 0 1 'completion-position-after-insert (length elem) s)
+          s))
+      (all-completions beforepoint table pred))
      point
      (car (completion-boundaries beforepoint table pred "")))))
 
