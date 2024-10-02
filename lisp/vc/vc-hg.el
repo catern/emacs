@@ -408,8 +408,8 @@ If LIMIT is non-nil, show no more than this many entries."
     (with-current-buffer
 	buffer
       (apply #'vc-hg-command buffer 'async files "log"
+             (format "-r%s:0" (or start-revision "."))
 	     (nconc
-	      (when start-revision (list (format "-r%s:0" start-revision)))
 	      (when limit (list "-l" (format "%s" limit)))
               (when (eq vc-log-view-type 'with-diff)
                 (list "-p"))
