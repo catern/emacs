@@ -2851,6 +2851,20 @@ This variable should be set by multi-langauge major modes before calling
 'treesit-major-mode-setup', in order for tree-sitter integration
 functionalities to operate correctly.
 
+** VC
+
+---
+*** Using 'e' from Log View mode to modify change comments now works for Git.
+
+---
+*** New user option 'vc-allow-rewriting-published-history'.
+Many VCS commands can change your copy of published change history
+without warning.  If VC commands detect that this could happen, they
+will stop.  You can customize this variable to permit rewriting history
+even though Emacs thinks it is dangerous.
+
+So far, this applies only to using 'e' from Log View mode for Git.
+
 
 * Changes in Emacs 30.1 on Non-Free Operating Systems
 
