@@ -245,7 +245,7 @@ If `ask', you will be prompted for a branch type."
                          "--config" "ui.report_untrusted=0"
 			 "--config" "alias.status=status"
 			 "--config" "defaults.status="
-			 "status" "-A" (file-relative-name file)))
+			 "status" "-mardc" (file-relative-name file)))
                     ;; Some problem happened.  E.g. We can't find an `hg'
                     ;; executable.
                     (error nil)))))))
@@ -260,12 +260,12 @@ If `ask', you will be prompted for a branch type."
 	 ((eq state ?=) 'up-to-date)
 	 ((eq state ?A) 'added)
 	 ((eq state ?M) 'edited)
-	 ((eq state ?I) 'ignored)
 	 ((eq state ?R) 'removed)
 	 ((eq state ?!) 'missing)
-	 ((eq state ??) 'unregistered)
 	 ((eq state ?C) 'up-to-date) ;; Older mercurial versions use this.
-	 (t 'up-to-date))))))
+         ;; Ignored or untracked files don't show up; they're both
+         ;; treated as unregistered.
+	 (t 'unregistered))))))
 
 (defun vc-hg-working-revision (_file)
   "Hg-specific version of `vc-working-revision'."
