@@ -2354,7 +2354,7 @@ and with BASE-SIZE appended as the last element."
         completions)
        base-size))))
 
-(defun display-completion-list (completions &optional common-substring group-fun)
+(defun display-completion-list (completions &optional common-substring group-fun full-count)
   "Display the list of completions, COMPLETIONS, using `standard-output'.
 Each element may be just a symbol or string
 or may be a list of two strings to be printed as if concatenated.
@@ -2366,7 +2366,9 @@ properties of `highlight'.
 At the end, this runs the normal hook `completion-setup-hook'.
 It can find the completion buffer in `standard-output'.
 GROUP-FUN is a `group-function' used for grouping the completion
-candidates."
+candidates.
+If FULL-COUNT is non-nil, it's used as the total number of
+completions."
   (declare (advertised-calling-convention (completions) "24.4"))
   (if common-substring
       (setq completions (completion-hilit-commonality
@@ -2379,17 +2381,24 @@ candidates."
 	(let ((standard-output (current-buffer))
 	      (completion-setup-hook nil))
           (with-suppressed-warnings ((callargs display-completion-list))
-	    (display-completion-list completions common-substring group-fun)))
+	    (display-completion-list completions common-substring group-fun full-count)))
 	(princ (buffer-string)))
 
     (with-current-buffer standard-output
       (goto-char (point-max))
       (if completions-header-format
-          (insert (format completions-header-format (length completions)))
+          (insert (format completions-header-format (or full-count (length completions))))
         (unless completion-show-help
           ;; Ensure beginning-of-buffer isn't a completion.
           (insert (propertize "\n" 'face '(:height 0)))))
-      (completion--insert-strings completions group-fun)))
+      (completion--insert-strings completions group-fun)
+      (when (and full-count (/= full-count (length completions)))
+        (newline)
+        (insert (propertize
+                 (format "Displaying %s of %s possible completions.\n"
+                         (length completions) full-count)
+                 'face
+                 'shadow)))))
 
   (run-hooks 'completion-setup-hook)
   nil)
@@ -2454,6 +2463,15 @@ These include:
                                         temp-buffer-max-height)))
         (resize-temp-buffer-window win))
     (fit-window-to-buffer win completions-max-height)))
+
+(defcustom completions-list-max 10000
+  "Maximum number of completions for `minibuffer-completion-help' to list.
+
+After the completions are sorted, any beyond this amount are
+discarded and a message about truncation is inserted.  This can
+improve performance when displaying large numbers of completions."
+  :type 'number
+  :version "31.1")
 
 (defcustom completion-auto-deselect t
   "If non-nil, deselect current completion candidate when you type in minibuffer.
@@ -2554,7 +2572,8 @@ The candidate will still be chosen by `choose-completion' unless
              ;; window, mark it as softly-dedicated, so bury-buffer in
              ;; minibuffer-hide-completions will know whether to
              ;; delete the window or not.
-             (display-buffer-mark-dedicated 'soft))
+             (display-buffer-mark-dedicated 'soft)
+             full-count)
         (with-current-buffer-window
           "*Completions*"
           ;; This is a copy of `display-buffer-fallback-action'
@@ -2610,6 +2629,11 @@ The candidate will still be chosen by `choose-completion' unless
                                  (_ completions-group-sort))
                                completions)))
 
+                      (when completions-list-max
+                        (setq full-count (length completions))
+                        (when (< completions-list-max full-count)
+                          (setq completions (take completions-list-max completions))))
+
                       (cond
                        (aff-fun
                         (setq completions
@@ -2661,7 +2685,7 @@ The candidate will still be chosen by `choose-completion' unless
                                                      (if (eq (car bounds) (length result))
                                                          'exact 'finished))))))
 
-                      (display-completion-list completions nil group-fun)
+                      (display-completion-list completions nil group-fun full-count)
                       (when current-candidate-and-offset
                         (with-current-buffer standard-output
                           (when-let* ((match (text-property-search-forward
