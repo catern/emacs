@@ -430,6 +430,21 @@ or earlier: it can break `dired-do-find-regexp-and-replace'."
   :version "28.1"
   :package-version '(xref . "1.2.0"))
 
+(defcustom xref-navigation-display-window-action nil
+  "When non-nil, the display action to use for navigation commands.
+
+The value should be nil or a buffer display action like described in
+docstring for `display-buffer'.
+
+This does not affect commands that specify the action explicitly,
+such as `xref-find-definitions-other-window'."
+  :type '(choice (const :tag "Use selected window" nil)
+                 (const :tag "Reuse existing or pop to buffer"
+                        (display-buffer-reuse-window))
+                 display-buffer--action-custom-type)
+  :version "31.1"
+  :package-version '(xref . "1.8.0"))
+
 (defcustom xref-history-storage #'xref-global-history
   "Function that returns xref history.
 
@@ -512,6 +527,11 @@ Erase the stack slots following this one."
 ;;;###autoload
 (define-obsolete-function-alias 'xref-pop-marker-stack #'xref-go-back "29.1")
 
+(defun xref--switch-to-buffer (buf)
+  (if xref-navigation-display-window-action
+      (pop-to-buffer buf xref-navigation-display-window-action)
+    (switch-to-buffer buf)))
+
 ;;;###autoload
 (defun xref-go-back ()
   "Go back to the previous position in xref history.
@@ -522,8 +542,8 @@ To undo, use \\[xref-go-forward]."
         (user-error "At start of xref history")
       (let ((marker (pop (car history))))
         (xref--push-forward (point-marker))
-        (switch-to-buffer (or (marker-buffer marker)
-                              (user-error "The marked buffer has been deleted")))
+        (xref--switch-to-buffer (or (marker-buffer marker)
+                                    (user-error "The marked buffer has been deleted")))
         (goto-char (marker-position marker))
         (set-marker marker nil nil)
         (run-hooks 'xref-after-return-hook)))))
@@ -537,8 +557,8 @@ To undo, use \\[xref-go-forward]."
         (user-error "At end of xref history")
       (let ((marker (pop (cdr history))))
         (xref--push-backward (point-marker))
-        (switch-to-buffer (or (marker-buffer marker)
-                              (user-error "The marked buffer has been deleted")))
+        (xref--switch-to-buffer (or (marker-buffer marker)
+                                    (user-error "The marked buffer has been deleted")))
         (goto-char (marker-position marker))
         (set-marker marker nil nil)
         (run-hooks 'xref-after-return-hook)))))
@@ -611,7 +631,7 @@ If SELECT is non-nil, select the target window."
                    (xref-location-marker (xref-item-location item))))
          (buf (marker-buffer marker)))
     (cl-ecase action
-      ((nil)  (switch-to-buffer buf))
+      ((nil)  (xref--switch-to-buffer buf))
       (window (pop-to-buffer buf t))
       (frame  (let ((pop-up-frames t)) (pop-to-buffer buf t))))
     (xref--goto-char marker))
@@ -669,6 +689,9 @@ and finally return the window."
                  t)
                 ((eq xref--original-window-intent 'window)
                  `((xref--display-buffer-in-other-window)
+                   (window . ,xref--original-window)))
+                (xref-navigation-display-window-action
+                 `(,xref-navigation-display-window-action
                    (window . ,xref--original-window)))
                 ((and
                   (window-live-p xref--original-window)
@@ -1589,6 +1612,9 @@ If sufficient information is available to determine a unique
 definition for IDENTIFIER, display it in the selected window.
 Otherwise, display the list of the possible definitions in a
 buffer where the user can select from the list.
+
+See also `xref-navigation-display-window-action' which can change
+the destination window.
 
 Use \\[xref-go-back] to return back to where you invoked this command."
   (interactive (list (xref--read-identifier "Find definitions of: ")))
