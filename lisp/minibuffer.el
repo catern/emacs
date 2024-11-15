@@ -2648,12 +2648,36 @@ The candidate will still be chosen by `choose-completion' unless
     (goto-char (or (next-single-property-change (point) 'completion--string)
                    (point-max)))))
 
+(defcustom completions-auto-update t
+  "If non-nil, update the *Completions* buffer as you type.
+
+This only affects the *Completions* buffer if it is already
+displayed."
+  :type '(choice (const :tag "*Completions* doesn't change as you type" nil)
+                 (const :tag "*Completions* updates as you type" t))
+  :version "31.1")
+
+(defun completions--background-update ()
+  "Try to update *Completions* without blocking input.
+
+This function uses `while-no-input' and sets `non-essential' to t
+so that the update is less likely to interfere with user typing."
+  (while-no-input
+    (let ((non-essential t))
+      (redisplay)
+      (if completion-in-region-mode
+          (completion-help-at-point)
+        (minibuffer-completion-help)))))
+
 (defun completions--after-change (_start _end _old-len)
   "Update displayed *Completions* buffer after change in buffer contents."
-  (when completion-auto-deselect
+  (when (or completion-auto-deselect completions-auto-update)
     (when-let* ((window (get-buffer-window "*Completions*" 0)))
-      (with-selected-window window
-        (completions--deselect)))))
+      (when completion-auto-deselect
+        (with-selected-window window
+          (completions--deselect)))
+      (when completions-auto-update
+        (completions--background-update)))))
 
 (defun minibuffer-completion-help (&optional start end)
   "Display a list of possible completions of the current minibuffer contents."
@@ -2744,7 +2768,7 @@ The candidate will still be chosen by `choose-completion' unless
             (body-function
              . ,#'(lambda (window)
                     (with-current-buffer mainbuf
-                      (when completion-auto-deselect
+                      (when (or completion-auto-deselect completions-auto-update)
                         (add-hook 'after-change-functions #'completions--after-change nil t))
                       ;; Remove the base-size tail because `sort' requires a properly
                       ;; nil-terminated list.
