@@ -251,6 +251,31 @@
            (car (completion-pcm-all-completions
                  "li-pac*" '("do-not-list-packages") nil 7)))))
 
+(ert-deftest completion-pcm-test-7 ()
+  ;; Wildcards are preserved even when right before a delimiter.
+  (should (equal
+           (completion-pcm-try-completion
+            "x*/"
+            '("x1/y1" "x2/y2")
+            nil 3)
+           '("x*/y" . 4)))
+  ;; Or around point.
+  (should (equal
+           (completion-pcm--merge-try
+            '(point star "foo") '("xxfoo" "xyfoo") "" "")
+           '("x*foo" . 1)))
+  (should (equal
+           (completion-pcm--merge-try
+            '(star point "foo") '("xxfoo" "xyfoo") "" "")
+           '("x*foo" . 2)))
+  ;; This is important if the wildcard is at the start of a component.
+  (should (equal
+           (completion-pcm-try-completion
+            "*/minibuf"
+            '("lisp/minibuffer.el" "src/minibuf.c")
+            nil 9)
+           '("*/minibuf" . 9))))
+
 (ert-deftest completion-substring-test-1 ()
   ;; One third of a match!
   (should (equal
