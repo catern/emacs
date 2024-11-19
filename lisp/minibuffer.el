@@ -1242,6 +1242,7 @@ overrides the default specified in `completion-category-defaults'."
                    (and probe (cons probe style))))))
            (completion--styles md)))
          (adjust-fn (get (cdr result-and-style) 'completion--adjust-metadata)))
+    (message "result: %s %s" (cond ((= n 1) 'try) ((= n 2) 'all)) result-and-style)
     (when (and adjust-fn metadata)
       (setcdr metadata (cdr (funcall adjust-fn metadata))))
     (if requote
@@ -3280,10 +3281,115 @@ same as `substitute-in-file-name'."
           (completion-table-with-context
            prefix table (substring string beg) nil action)))))))
 
+(defvar my-xprop-dir "~/src/xprop/")
+(defvar completion-file-name-use-project-files t)
+
+(require 'project)
+(setf (alist-get 'file-recursive completion-category-defaults)
+      '((styles basic emacs22
+                partial-completion
+                (partial-completion ((completion-pcm-leading-wildcard t)))
+                )))
+
+(defvar completion-file-name--project-files-cache-last-clear nil
+  "The last time the files caches were cleared.")
+
+(defvar completion-file-name--project-files-cache nil
+  "An alist mapping project roots to `project-files'.")
+
+(defvar completion-file-name--relative-files-cache nil
+  "An alist mapping directories to files under that directory.")
+
+(defun completion-file-name--project-files-relative (dir)
+  "Return files under DIR using `project-files'."
+  (when (or (null completion-file-name--project-files-cache-last-clear)
+            (time-less-p (time-add completion-file-name--project-files-cache-last-clear (seconds-to-time 60))
+                         (current-time)))
+    (setq completion-file-name--project-files-cache-last-clear (current-time)
+          completion-file-name--project-files-cache nil
+          completion-file-name--relative-files-cache nil))
+  (let ((files (alist-get dir completion-file-name--relative-files-cache 'unset nil #'equal)))
+    (when (eq files 'unset)
+      (setq files
+            (if-let ((project (project-current nil dir)))
+                (let* ((root (project-root project))
+                       (project-files (alist-get root completion-file-name--project-files-cache 'unset nil #'equal)))
+                  (when (eq project-files 'unset)
+                    (message "calling project-files for %s %s %s" project root
+                             (mapcar #'car completion-file-name--project-files-cache))
+                    (setq project-files (project-files project))
+                    (push (cons root project-files) completion-file-name--project-files-cache))
+                  (let ((expanded-dir (expand-file-name dir)))
+                    (setq files (mapcan
+                                 (lambda (file)
+                                   (when (string-prefix-p expanded-dir file)
+                                     (list (substring file (length expanded-dir)))))
+                                 project-files))))))
+      (push (cons dir files) completion-file-name--relative-files-cache))
+    files))
+
+(require 'subr-x)
 (defun completion-file-name-table (string pred action)
   "Completion table for file names."
+  (message "upf=%s %s %s" completion-file-name-use-project-files string action)
   (condition-case nil
       (cond
+       ((eq action 'lambda)
+        (if (zerop (length string))
+            nil          ;Not sure why it's here, but it probably doesn't harm.
+          (funcall (or pred 'file-exists-p) string)))
+       (completion-file-name-use-project-files
+        ;; (when (eq action t) (debug))
+        (if-let* (;; TODO support completion on a non-absolute file name using
+                  ;; `default-directory' like the code for specdir and realdir below does.
+                  (dir (file-name-directory string))
+                  (project (project-current nil dir))
+                  (string-outside-project
+                   ;; If STRING names a file name in the project, return the part of
+                   ;; STRING which is outside the project.
+                   (let ((in-project (file-relative-name string (project-root project))))
+                     (cond
+                      ((string-equal in-project "./") string)
+                      ((string-suffix-p in-project string) (string-remove-suffix in-project string)))))
+                  (string-inside-project (substring string (length string-outside-project)))
+                  ;; If there aren't any files in `project-files' which match DIR, we'll
+                  ;; fall through to normal completion, so the normal metadata and
+                  ;; boundaries are returned.
+                  (files (completion-file-name--project-files-relative string-outside-project)))
+            (progn
+              (message "upf: %s %s %s" string-inside-project string-outside-project (take 3 files))
+              ;; (debug)
+              (cond
+               ((eq action 'metadata) '(metadata (category . file-recursive)))
+               ((and (consp action) (eq (car action) 'boundaries))
+                (let* ((start (length string-outside-project))
+                       ;; SUFFIX is what's currently after point in the minibuffer.
+                       (suffix (cdr action))
+                       (end (length suffix)))
+                  `(boundaries ,start . ,end)))
+               (t
+                (let* ((default-directory string-outside-project)
+                       (completion-file-name-use-project-files nil))
+                  (cond
+                   ((null action)
+                    (let ((completion-inside-project
+                           (funcall (completion-table-merge #'completion-file-name-table files)
+                                    string-inside-project pred action)))
+                      (message "try completion-inside-project %s" completion-inside-project)
+                      (msg "try ret" (if (stringp completion-inside-project)
+                                         (file-name-concat string-outside-project completion-inside-project)
+                                       completion-inside-project))))
+                   ((eq action t)
+                    (let* ((comps (all-completions string-inside-project files pred))
+                           (dir-inside-project (file-name-directory string-inside-project))
+                           (normal-comps
+                            (mapcar (lambda (file) (concat dir-inside-project file))
+                                    (all-completions string-inside-project #'completion-file-name-table pred))))
+                      (message "all ret %s %s %s" (length comps) (take 3 comps) (take 3 normal-comps))
+                      (nconc comps normal-comps))))))))
+          (let ((completion-file-name-use-project-files nil))
+            (message "in no case")
+            (completion-file-name-table string pred action))))
        ((eq action 'metadata) '(metadata (category . file)))
        ((string-match-p "\\`~[^/\\]*\\'" string)
         (completion-table-with-context "~"
@@ -3302,12 +3408,6 @@ same as `substitute-in-file-name'."
             ;; see if we can come up with a better fix when we bump
             ;; into more such problematic cases.
             ,(min start (length string)) . ,end)))
-
-       ((eq action 'lambda)
-        (if (zerop (length string))
-            nil          ;Not sure why it's here, but it probably doesn't harm.
-          (funcall (or pred 'file-exists-p) string)))
-
        (t
         (let* ((name (file-name-nondirectory string))
                (specdir (file-name-directory string))
@@ -4231,6 +4331,7 @@ filter out additional entries (because TABLE might not obey PRED)."
 (defun completion-pcm-all-completions (string table pred point)
   (pcase-let ((`(,pattern ,all ,prefix ,_suffix)
                (completion-pcm--find-all-completions string table pred point)))
+    (message "pcm pattern: %s prefix %s _suffix %s" pattern prefix _suffix)
     (when all
       (nconc (completion-pcm--hilit-commonality pattern all)
              (length prefix)))))
