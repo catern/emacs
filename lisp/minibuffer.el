@@ -3284,11 +3284,11 @@ same as `substitute-in-file-name'."
 (defvar my-xprop-dir "~/src/xprop/")
 (defvar completion-file-name-use-project-files t)
 
-(require 'project)
 (setf (alist-get 'file-recursive completion-category-defaults)
-      '((styles basic emacs22
+      '((styles basic substring
                 partial-completion
                 (partial-completion ((completion-pcm-leading-wildcard t)))
+                emacs22
                 )))
 
 (defvar completion-file-name--project-files-cache-last-clear nil
@@ -3328,10 +3328,11 @@ same as `substitute-in-file-name'."
       (push (cons dir files) completion-file-name--relative-files-cache))
     files))
 
-(require 'subr-x)
 (defun completion-file-name-table (string pred action)
   "Completion table for file names."
   (message "upf=%s %s %s" completion-file-name-use-project-files string action)
+  (require 'subr-x)
+  (require 'project)
   (condition-case nil
       (cond
        ((eq action 'lambda)
@@ -3352,39 +3353,45 @@ same as `substitute-in-file-name'."
                       ((string-equal in-project "./") string)
                       ((string-suffix-p in-project string) (string-remove-suffix in-project string)))))
                   (string-inside-project (substring string (length string-outside-project)))
+                  ;;;; Return completions under the entire project.
+                  ;; (context string-outside-project)
+                  ;; (component string-inside-project)
+                  ;;;; Return completions adjusted to be under the current dir.
+                  (context dir)
+                  (component (file-name-nondirectory string))
                   ;; If there aren't any files in `project-files' which match DIR, we'll
                   ;; fall through to normal completion, so the normal metadata and
                   ;; boundaries are returned.
-                  (files (completion-file-name--project-files-relative string-outside-project)))
+                  (files (completion-file-name--project-files-relative context)))
             (progn
-              (message "upf: %s %s %s" string-inside-project string-outside-project (take 3 files))
+              (message "upf: %s %s %s" context component (take 3 files))
               ;; (debug)
               (cond
                ((eq action 'metadata) '(metadata (category . file-recursive)))
                ((and (consp action) (eq (car action) 'boundaries))
-                (let* ((start (length string-outside-project))
+                (let* ((start (length context))
                        ;; SUFFIX is what's currently after point in the minibuffer.
                        (suffix (cdr action))
                        (end (length suffix)))
                   `(boundaries ,start . ,end)))
                (t
-                (let* ((default-directory string-outside-project)
+                (let* ((default-directory context)
                        (completion-file-name-use-project-files nil))
                   (cond
                    ((null action)
                     (let ((completion-inside-project
                            (funcall (completion-table-merge #'completion-file-name-table files)
-                                    string-inside-project pred action)))
+                                    component pred action)))
                       (message "try completion-inside-project %s" completion-inside-project)
                       (msg "try ret" (if (stringp completion-inside-project)
-                                         (file-name-concat string-outside-project completion-inside-project)
+                                         (file-name-concat context completion-inside-project)
                                        completion-inside-project))))
                    ((eq action t)
-                    (let* ((comps (all-completions string-inside-project files pred))
-                           (dir-inside-project (file-name-directory string-inside-project))
+                    (let* ((comps (all-completions component files pred))
+                           (component-dir (file-name-directory component))
                            (normal-comps
-                            (mapcar (lambda (file) (concat dir-inside-project file))
-                                    (all-completions string-inside-project #'completion-file-name-table pred))))
+                            (mapcar (lambda (file) (concat component-dir file))
+                                    (all-completions component #'completion-file-name-table pred))))
                       (message "all ret %s %s %s" (length comps) (take 3 comps) (take 3 normal-comps))
                       (nconc comps normal-comps))))))))
           (let ((completion-file-name-use-project-files nil))
