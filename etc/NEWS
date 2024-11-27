@@ -1919,6 +1919,17 @@ buffer.  We recommend using an alternative like 'imenu' instead.
 
 *** 'jsonrpc-default-request-timeout' is now a defcustom.
 
+** Xref
+
+The commands that jump to some location use 'display-buffer' and specify
+the category 'xref-jump'.  As a result you can customize how the
+destination window is chosen using 'display-buffer-alist'.  Example:
+
+  (setq display-buffer-alist '(((category . xref)
+                                (display-buffer-reuse-window
+                                 display-buffer-use-some-window)
+                                (some-window . mru))))
+
 
 * New Modes and Packages in Emacs 30.1
 
