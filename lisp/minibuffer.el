@@ -3907,18 +3907,19 @@ the commands start with a \"-\" or a SPC."
 	 trivial)))
 
 (defcustom completion-pcm-leading-wildcard nil
-  "If non-nil, partial-completion completes as if there's a leading wildcard.
+  "If non-nil, partial-completion behaves as if each word is preceded by wildcard.
 
-If nil (the default), the partial-completion style completes a string
-like \"o/t\" as if it was \"o*/t*\".  This means \"one/two\" is a valid
-completion, but not \"zero/one/two\" or \"zeroone/two\".
+If nil (the default), partial-completion requires each word in a
+matching completion alternative to have the same beginning as each
+\"word\" in the minibuffer text, where \"word\" is determined by
+`completion-pcm-word-delimiters'.
 
-If non-nil, the partial-completion style completes \"o/t\" as if it was
-\"*o*/t*\".  This means \"one/two\", \"zero/one/two\" and
-\"zeroone/two\" are all valid completions.  Note that this can be slower
-to compute since less filtering of the completion candidates is
-possible."
-  :version "30.1"
+If non-nil, partial-completion allows any string of characters to occur
+at the beginning of each word in a completion alternative, as if a
+wildcard such as \"*\" was present at the beginning of each word.  This
+makes partial-completion behave more like the substring completion
+style."
+  :version "31.1"
   :type 'boolean)
 
 (defun completion-pcm--string->pattern (string &optional point)
@@ -3964,7 +3965,7 @@ or a symbol, see `completion-pcm--merge-completions'."
               (setq p0 p)
             (push (substring string p (match-end 0)) pattern)
             ;; `any-delim' is used so that "a-b" also finds "array->beginning".
-            (setq pending 'any-delim)
+            (setq pending (if completion-pcm-leading-wildcard 'prefix 'any-delim))
             (setq p0 (match-end 0))))
         (setq p p0))
 
