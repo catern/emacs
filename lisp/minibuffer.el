@@ -2277,6 +2277,8 @@ Runs of equal candidate strings are eliminated.  GROUP-FUN is a
         (setq-local completion--lazy-insert-group-fun group-fun)
         (setq-local completion--lazy-insert-start (point-marker))
         (setq strings (take completions-insert-lazily strings)))
+      (dolist (str strings)
+        (completion-lazy-hilit str))
       (funcall (intern (format "completion--insert-%s" completions-format))
                strings group-fun length wwidth colwidth columns)
       (when is-truncated
@@ -2681,12 +2683,14 @@ so that the update is less likely to interfere with user typing."
          (end (or end (point-max)))
          (string (buffer-substring start end))
          (md (completion--field-metadata start))
-         (completions (completion-all-completions
-                       string
-                       minibuffer-completion-table
-                       minibuffer-completion-predicate
-                       (- (point) start)
-                       md)))
+         (completions
+          (let ((completion-lazy-hilit t))
+            (completion-all-completions
+             string
+             minibuffer-completion-table
+             minibuffer-completion-predicate
+             (- (point) start)
+             md))))
     (message nil)
     (if (or (null completions)
             (and (not (consp (cdr completions)))
