@@ -2230,6 +2230,19 @@ If this is nil, no heading line will be shown."
                  (string :tag "Format string for heading line"))
   :version "29.1")
 
+(defcustom completions-insert-lazily 200
+  "If non-nil, completions are inserted lazily.
+
+When a number, only that many completions are inserted, and the
+rest are inserted lazily."
+  :type '(choice (const :tag "Render all completions immediately" nil)
+                 (integer :tag "Only render this many completions")))
+
+(defvar-local completion--lazy-insert-completions nil)
+(defvar-local completion--lazy-insert-group-fun nil)
+(defvar-local completion--lazy-insert-start nil)
+(defvar-local completion--lazy-insert-end nil)
+
 (defun completion--insert-strings (strings &optional group-fun)
   "Insert a list of STRINGS into the current buffer.
 The candidate strings are inserted into the buffer depending on the
@@ -2251,14 +2264,26 @@ Runs of equal candidate strings are eliminated.  GROUP-FUN is a
 		     ;; Don't allocate more columns than we can fill.
 		     ;; Windows can't show less than 3 lines anyway.
 		     (max 1 (/ (length strings) 2))))
-	   (colwidth (/ wwidth columns)))
+	   (colwidth (/ wwidth columns))
+           is-truncated)
       (unless (or tab-stop-list (null completion-tab-width)
                   (zerop (mod colwidth completion-tab-width)))
         ;; Align to tab positions for the case
         ;; when the caller uses tabs inside prefix.
         (setq colwidth (- colwidth (mod colwidth completion-tab-width))))
+      (when (and completions-insert-lazily (< completions-insert-lazily (length strings)))
+        (setq is-truncated t)
+        (setq-local completion--lazy-insert-completions strings)
+        (setq-local completion--lazy-insert-group-fun group-fun)
+        (setq-local completion--lazy-insert-start (point-marker))
+        (setq strings (take completions-insert-lazily strings)))
       (funcall (intern (format "completion--insert-%s" completions-format))
-               strings group-fun length wwidth colwidth columns))))
+               strings group-fun length wwidth colwidth columns)
+      (when is-truncated
+        (newline)
+        (insert-button "[Completions truncated, click here to insert the rest.]"
+                       'action #'completion--lazy-display-completion-list)
+        (setq-local completion--lazy-insert-end (point-marker))))))
 
 (defun completion--insert-horizontal (strings group-fun
                                               length wwidth
@@ -2506,6 +2531,18 @@ candidates."
 
   (run-hooks 'completion-setup-hook)
   nil)
+
+(defun completion--lazy-display-completion-list (&optional _button)
+  (when completion--lazy-insert-completions
+    (let ((completions-insert-lazily nil)
+          (standard-output (current-buffer))
+          (inhibit-read-only t))
+      (delete-region completion--lazy-insert-start completion--lazy-insert-end)
+      (save-excursion
+        (goto-char completion--lazy-insert-start)
+        (completion--insert-strings
+         completion--lazy-insert-completions completion--lazy-insert-group-fun)
+        (setq-local completion--lazy-insert-completions nil)))))
 
 (defvar completion-extra-properties nil
   "Property list of extra properties of the current completion job.
@@ -4962,6 +4999,7 @@ and execute the forms."
                             (get-buffer-window "*Completions*" 0)))))
      (when window
        (with-selected-window window
+         (completion--lazy-display-completion-list)
          ,@body))))
 
 (defcustom minibuffer-completion-auto-choose t
