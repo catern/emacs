@@ -2230,6 +2230,16 @@ If this is nil, no heading line will be shown."
                  (string :tag "Format string for heading line"))
   :version "29.1")
 
+(defcustom completions-insert-lazily 200
+  "If non-nil, completions are inserted lazily.
+
+When a number, only that many completions are inserted, and the
+rest are inserted lazily."
+  :type '(choice (const :tag "Render all completions immediately" nil)
+                 (integer :tag "Only render this many completions")))
+
+(defvar-local completion--lazy-insert-button nil)
+
 (defun completion--insert-strings (strings &optional group-fun)
   "Insert a list of STRINGS into the current buffer.
 The candidate strings are inserted into the buffer depending on the
@@ -2257,8 +2267,41 @@ Runs of equal candidate strings are eliminated.  GROUP-FUN is a
         ;; Align to tab positions for the case
         ;; when the caller uses tabs inside prefix.
         (setq colwidth (- colwidth (mod colwidth completion-tab-width))))
-      (funcall (intern (format "completion--insert-%s" completions-format))
-               strings group-fun length wwidth colwidth columns))))
+      (let ((truncated-strings
+             (and completions-insert-lazily
+                  (< completions-insert-lazily (length strings))
+                  (take completions-insert-lazily strings)))
+            (start (point)))
+        (funcall (intern (format "completion--insert-%s" completions-format))
+                 (mapcar (lambda (candidate)
+                           (if (consp candidate)
+                               (setcar candidate (completion-lazy-hilit (car candidate)))
+                             (completion-lazy-hilit candidate)))
+                         (or truncated-strings strings))
+                 group-fun length wwidth colwidth columns)
+        (when truncated-strings
+          (newline)
+          (setq-local completion--lazy-insert-button
+                      (insert-button "[Completions truncated, click here to insert the rest.]"
+                                     'action #'completion--lazy-insert-strings))
+          (button-put completion--lazy-insert-button 'group-fun group-fun)
+          (button-put completion--lazy-insert-button 'completions-start (copy-marker start))
+          (button-put completion--lazy-insert-button 'completion-strings strings))))))
+
+(defun completion--lazy-insert-strings (&optional button)
+  (setq button (or button completion--lazy-insert-button))
+  (when button
+    (let ((completions-insert-lazily nil)
+          (completion-lazy-hilit t)
+          (standard-output (current-buffer))
+          (inhibit-read-only t)
+          (group-fun (button-get button 'group-fun))
+          (strings (button-get button 'completion-strings)))
+      (save-excursion
+        (goto-char (button-get button 'completions-start))
+        (delete-region (point) (button-end button))
+        (setq-local completion--lazy-insert-button nil)
+        (completion--insert-strings strings group-fun)))))
 
 (defun completion--insert-horizontal (strings group-fun
                                               length wwidth
@@ -2620,6 +2663,7 @@ The candidate will still be chosen by `choose-completion' unless
          (end (or end (point-max)))
          (string (buffer-substring start end))
          (md (completion--field-metadata start))
+         (completion-lazy-hilit completions-insert-lazily)
          (completions (completion-all-completions
                        string
                        minibuffer-completion-table
@@ -4962,6 +5006,7 @@ and execute the forms."
                             (get-buffer-window "*Completions*" 0)))))
      (when window
        (with-selected-window window
+         (completion--lazy-insert-strings)
          ,@body))))
 
 (defcustom minibuffer-completion-auto-choose t
