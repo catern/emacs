@@ -1572,12 +1572,23 @@ general form of conditions."
                  (not
                   (project--buffer-check
                    (cdr buffer) project-ignore-buffer-conditions)))))
-         (buffer (read-buffer
-                  "Switch to buffer: "
-                  (when (funcall predicate (cons other-name other-buffer))
-                    other-name)
-                  nil
-                  predicate)))
+         (buffer
+          (if uniquify-buffer-name-style
+              (let ((ht (uniquify-get-unique-names
+                         (cl-delete-if (lambda (buf) (string-prefix-p " " (buffer-name buf))) buffers))))
+                (alist-get (completing-read
+                          "Switch to buffer: "
+                          (completion-table-with-metadata ht '((category . project-buffer)
+                                                               (display-sort-function . identity)
+                                                               (eager-update . t)))
+                          nil t)
+                         ht nil nil #'equal))
+            (read-buffer
+             "Switch to buffer: "
+             (when (funcall predicate (cons other-name other-buffer))
+               other-name)
+             nil
+             predicate))))
     ;; XXX: This check hardcodes the default buffer-belonging relation
     ;; which `project-buffers' is allowed to override.  Straighten
     ;; this up sometime later.  Or not.  Since we can add a method
