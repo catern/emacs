@@ -1181,7 +1181,7 @@ It is based on `log-edit-mode', and has Git-specific extensions."
           (with-temp-file patch-file
             (insert vc-git-patch-string))
           (unwind-protect
-              (vc-git-command nil 0 patch-file "apply" "--cached")
+              (vc-git-command nil 0 nil "apply" "--cached" patch-file)
             (delete-file patch-file))))
       (when to-stash (vc-git--stash-staged-changes files)))
     ;; When operating on the whole tree, better pass "-a" than ".",
@@ -1207,7 +1207,7 @@ It is based on `log-edit-mode', and has Git-specific extensions."
         (unwind-protect
             (progn (with-temp-file cached
                      (vc-git-command t 0 nil "stash" "show" "-p"))
-                   (vc-git-command nil 0 cached "apply" "--cached"))
+                   (vc-git-command nil 0 nil "apply" "--cached" cached))
           (delete-file cached))
         (vc-git-command nil 0 nil "stash" "drop")))))
 
@@ -1238,7 +1238,8 @@ It is based on `log-edit-mode', and has Git-specific extensions."
                 (unwind-protect
                     (progn
                       (vc-git-command nil 0 nil "read-tree" "HEAD")
-                      (vc-git-command nil 0 cached "apply" "--cached")
+                      (vc-git-command nil 0 nil "apply" "--cached"
+                                      cached)
                       (setq tree (git-string "write-tree")))
                   (delete-file index))))
           (delete-file cached))
