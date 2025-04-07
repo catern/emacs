@@ -1002,6 +1002,19 @@ the URL-REGEXP of the association."
                 :value-type ,vc-cloneable-backends-custom-type)
   :version "31.1")
 
+(defcustom vc-async-checkin nil
+  "If non-nil, checkin operations should be done asynchronously.
+
+This is useful to set as a directory local variable in repositories
+where the VCS in use performs checkin operations slowly.
+For example, Git is slow when committing changes to very large files,
+and Mercurial can be slow when there is a very large number of files.
+
+Not supported by all backends."
+  :type 'boolean
+  :safe #'booleanp
+  :version "31.1")
+
 
 ;; File property caching
 
