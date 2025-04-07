@@ -1505,6 +1505,10 @@ behavior or dispense with the prompting.
 These correspond to the existing 'z p' to pop a stash and 'P' to pop the
 stash at point (deleting the stash at point is also bound to C-k).
 
++++
+*** New user option 'vc-async-checkin' to enable async checkin operations.
+Currently only supported by the Git and Mercurial backends.
+
 ** Diff mode
 
 +++
