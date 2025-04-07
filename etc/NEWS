@@ -1571,6 +1571,10 @@ This replaces and generalizes the old 'vc-annotate-parent-file'.
 This specifies the revision to which the buffer's contents corresponds.
 This replaces and generalizes the old 'vc-annotate-parent-rev'.
 
++++
+*** New user option 'vc-async-checkin' to enable async checkin operations.
+Currently only supported by the Git and Mercurial backends.
+
 ** Diff mode
 
 +++
