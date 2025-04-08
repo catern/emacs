@@ -2332,12 +2332,14 @@ readevalloop_1 (int old)
    information.  */
 
 static AVOID
-end_of_file_error (void)
+end_of_file_error (Lisp_Object readcharfun)
 {
-  if (STRINGP (Vload_true_file_name))
+  if (FROM_FILE_P (readcharfun) && STRINGP (Vload_true_file_name))
     xsignal1 (Qend_of_file, Vload_true_file_name);
-
-  xsignal0 (Qend_of_file);
+  else if (BUFFERP (readcharfun))
+    xsignal1 (Qend_of_file, readcharfun);
+  else
+    xsignal0 (Qend_of_file);
 }
 
 static Lisp_Object
@@ -2851,7 +2853,7 @@ read_char_escape (Lisp_Object readcharfun, int next_char)
   switch (c)
     {
     case -1:
-      end_of_file_error ();
+      end_of_file_error (readcharfun);
 
     case 'a': chr = '\a'; break;
     case 'b': chr = '\b'; break;
@@ -3024,7 +3026,7 @@ read_char_escape (Lisp_Object readcharfun, int next_char)
           {
             int c = READCHAR;
             if (c < 0)
-              end_of_file_error ();
+              end_of_file_error (readcharfun);
             if (c == '}')
               break;
             if (c >= 0x80)
@@ -3192,7 +3194,7 @@ read_char_literal (Lisp_Object readcharfun)
 {
   int ch = READCHAR;
   if (ch < 0)
-    end_of_file_error ();
+    end_of_file_error (readcharfun);
 
   /* Accept `single space' syntax like (list ? x) where the
      whitespace character is SPC or TAB.
@@ -3338,7 +3340,7 @@ read_string_literal (Lisp_Object readcharfun)
     }
 
   if (ch < 0)
-    end_of_file_error ();
+    end_of_file_error (readcharfun);
 
   if (!force_multibyte && force_singlebyte)
     {
@@ -3766,7 +3768,7 @@ skip_space_and_comments (Lisp_Object readcharfun)
 	  c = READCHAR;
 	while (c >= 0 && c != '\n');
       if (c < 0)
-	end_of_file_error ();
+	end_of_file_error (readcharfun);
     }
   while (c <= 32 || c == NO_BREAK_SPACE);
   UNREAD (c);
@@ -3961,7 +3963,7 @@ read0 (Lisp_Object readcharfun, bool locate_syms)
   bool multibyte;
   int c = READCHAR_REPORT_MULTIBYTE (&multibyte);
   if (c < 0)
-    end_of_file_error ();
+    end_of_file_error (readcharfun);
 
   switch (c)
     {
@@ -4392,7 +4394,7 @@ read0 (Lisp_Object readcharfun, bool locate_syms)
 	      {
 		c = READCHAR;
 		if (c < 0)
-		  end_of_file_error ();
+		  end_of_file_error (readcharfun);
 		quoted = true;
 	      }
 
