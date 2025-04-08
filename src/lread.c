@@ -2380,12 +2380,14 @@ build_load_history (Lisp_Object filename, bool entire)
    information.  */
 
 static AVOID
-end_of_file_error (void)
+end_of_file_error (Lisp_Object readcharfun)
 {
-  if (STRINGP (Vload_true_file_name))
+  if (FROM_FILE_P (readcharfun) && STRINGP (Vload_true_file_name))
     xsignal1 (Qend_of_file, Vload_true_file_name);
-
-  xsignal0 (Qend_of_file);
+  else if (BUFFERP (readcharfun))
+    xsignal1 (Qend_of_file, readcharfun);
+  else
+    xsignal0 (Qend_of_file);
 }
 
 static Lisp_Object
@@ -2894,7 +2896,7 @@ read_char_escape (source_t *source, int next_char)
   switch (c)
     {
     case -1:
-      end_of_file_error ();
+      end_of_file_error (readcharfun);
 
     case 'a': chr = '\a'; break;
     case 'b': chr = '\b'; break;
@@ -3067,7 +3069,7 @@ read_char_escape (source_t *source, int next_char)
           {
             int c = readchar (source);
             if (c < 0)
-              end_of_file_error ();
+              end_of_file_error (readcharfun);
             if (c == '}')
               break;
             if (c >= 0x80)
@@ -3237,7 +3239,7 @@ read_char_literal (source_t *source)
 {
   int ch = readchar (source);
   if (ch < 0)
-    end_of_file_error ();
+    end_of_file_error (readcharfun);
 
   /* Accept `single space' syntax like (list ? x) where the
      whitespace character is SPC or TAB.
@@ -3383,7 +3385,7 @@ read_string_literal (source_t *source)
     }
 
   if (ch < 0)
-    end_of_file_error ();
+    end_of_file_error (readcharfun);
 
   if (!force_multibyte && force_singlebyte)
     {
@@ -3813,7 +3815,7 @@ skip_space_and_comments (source_t *source)
 	  c = readchar (source);
 	while (c >= 0 && c != '\n');
       if (c < 0)
-	end_of_file_error ();
+	end_of_file_error (readcharfun);
     }
   while (c <= 32 || c == NO_BREAK_SPACE);
   unreadchar (source, c);
@@ -4030,7 +4032,7 @@ read0 (source_t *source, bool locate_syms)
   Lisp_Object obj;
   int c = readchar (source);
   if (c < 0)
-    end_of_file_error ();
+    end_of_file_error (readcharfun);
 
   switch (c)
     {
@@ -4447,7 +4449,7 @@ read0 (source_t *source, bool locate_syms)
 	      {
 		c = readchar (source);
 		if (c < 0)
-		  end_of_file_error ();
+		  end_of_file_error (readcharfun);
 		quoted = true;
 	      }
 
