@@ -4241,7 +4241,7 @@ or a symbol, see `completion-pcm--merge-completions'."
               (setq p0 p)
             (push (substring string p (match-end 0)) pattern)
             ;; `any-delim' is used so that "a-b" also finds "array->beginning".
-            (setq pending (if completion-pcm-leading-wildcard 'prefix 'any-delim))
+            (setq pending (if completion-pcm-leading-wildcard 'star 'any-delim))
             (setq p0 (match-end 0))))
         (setq p p0))
 
@@ -4251,7 +4251,7 @@ or a symbol, see `completion-pcm--merge-completions'."
       (setq pattern (nreverse pattern))
       (when completion-pcm-leading-wildcard
         (when (stringp (car pattern))
-          (push 'prefix pattern)))
+          (push 'star pattern)))
       pattern)))
 
 (defun completion-pcm--optimize-pattern (p)
