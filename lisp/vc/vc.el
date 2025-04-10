@@ -1135,6 +1135,19 @@ If the value is t, the backend is deduced in all modes."
 (declare-function vc-dir-deduce-fileset "vc-dir" (&optional state-model-only-files))
 (declare-function dired-vc-deduce-fileset "dired-aux" (&optional state-model-only-files not-state-changing))
 
+(defvar-local vc-buffer-overriding-fileset nil
+  "Specialized, static value for `vc-deduce-fileset' for this buffer.
+If non-nil, this should be a list of length 2 or 5.
+See `vc-deduce-fileset' regarding these possible forms.
+If this list is of length 2, it will be used only when the
+STATE-MODEL-ONLY-FILES argument to `vc-deduce-fileset' is nil.")
+
+(defvar-local vc-buffer-revision nil
+  "VCS revision to which this buffer's contents corresponds.
+Functions which set this should also set `vc-buffer-overriding-fileset'
+such that the buffer's local variables also specify a VC backend,
+rendering the value of this variable unambiguous.")
+
 (defun vc-deduce-fileset (&optional not-state-changing
 				    allow-unregistered
 				    state-model-only-files)
@@ -1174,6 +1187,14 @@ BEWARE: this function may change the current buffer."
     (set-buffer (buffer-base-buffer)))
   (let (backend)
     (cond
+     ((and vc-buffer-overriding-fileset
+           (not (or (length= vc-buffer-overriding-fileset 2)
+                    (length= vc-buffer-overriding-fileset 5))))
+      (error "Invalid value for `vc-buffer-overriding-fileset' %S"
+             vc-buffer-overriding-fileset))
+     ((and (or (not state-model-only-files)
+               (length= vc-buffer-overriding-fileset 5))
+           vc-buffer-overriding-fileset))
      ((derived-mode-p 'vc-dir-mode)
       (vc-dir-deduce-fileset state-model-only-files))
      ((derived-mode-p 'dired-mode)
@@ -1216,6 +1237,9 @@ BEWARE: this function may change the current buffer."
 	      (list buffer-file-name))))
      (t (error "File is not under version control")))))
 
+;; This function should possibly honor `vc-buffer-overriding-fileset'
+;; when the fileset consists of a single file, but only if that file is
+;; part of the current working revision, i.e., actually on disk now.
 (defun vc-ensure-vc-buffer ()
   "Make sure that the current buffer visits a version-controlled file."
   (cond
@@ -2394,7 +2418,8 @@ Use BACKEND as the VC backend if specified."
 Saves the buffer to the file."
   (let ((automatic-backup (vc-version-backup-file-name file revision))
 	(filebuf (or (get-file-buffer file) (current-buffer)))
-        (filename (vc-version-backup-file-name file revision 'manual)))
+        (filename (vc-version-backup-file-name file revision 'manual))
+        (backend (or backend (vc-backend file))))
     (unless (file-exists-p filename)
       (if (file-exists-p automatic-backup)
           (rename-file automatic-backup filename nil)
@@ -2412,19 +2437,19 @@ Saves the buffer to the file."
 		      ;; Change buffer to get local value of
 		      ;; vc-checkout-switches.
 		      (with-current-buffer filebuf
-			(if backend
-			    (vc-call-backend backend 'find-revision file revision outbuf)
-			  (vc-call find-revision file revision outbuf)))))
+			(vc-call-backend backend 'find-revision
+                                         file revision outbuf))))
 		  (setq failed nil))
 	      (when (and failed (file-exists-p filename))
 		(delete-file filename))))
 	  (vc-mode-line file))
 	(message "Checking out %s...done" filename)))
-    (let ((result-buf (find-file-noselect filename)))
+    (let ((result-buf (find-file-noselect filename))
+          (file (expand-file-name file))) ; ensure it's absolute
       (with-current-buffer result-buf
-	;; Set the parent buffer so that things like
-	;; C-x v g, C-x v l, ... etc work.
-        (setq-local vc-parent-buffer filebuf))
+        (setq-local vc-parent-buffer filebuf
+                    vc-buffer-overriding-fileset `(,backend (,file))
+                    vc-buffer-revision revision))
       result-buf)))
 
 (defun vc-find-revision-no-save (file revision &optional backend buffer)
@@ -2433,9 +2458,11 @@ If BUFFER omitted or nil, this function creates a new buffer and sets
 `buffer-file-name' to the name constructed from the file name and the
 revision number.
 Unlike `vc-find-revision-save', doesn't save the buffer to the file."
-  (let* ((buffer (when (buffer-live-p buffer) buffer))
+  (let* ((buffer (and (buffer-live-p buffer) buffer))
          (filebuf (or buffer (get-file-buffer file) (current-buffer)))
-         (filename (unless buffer (vc-version-backup-file-name file revision 'manual))))
+         (filename (and (not buffer)
+                        (vc-version-backup-file-name file revision 'manual)))
+         (backend (or backend (vc-backend file))))
     (unless (and (not buffer)
                  (or (get-file-buffer filename)
                      (file-exists-p filename)))
@@ -2446,9 +2473,7 @@ Unlike `vc-find-revision-save', doesn't save the buffer to the file."
                 (unless buffer (setq buffer-file-name filename))
 		(let ((outbuf (current-buffer)))
 		  (with-current-buffer filebuf
-		    (if backend
-			(vc-call-backend backend 'find-revision file revision outbuf)
-		      (vc-call find-revision file revision outbuf))))
+		    (vc-call-backend backend 'find-revision file revision outbuf)))
                 (decode-coding-inserted-region (point-min) (point-max) file)
                 (after-insert-file-set-coding (- (point-max) (point-min)))
                 (goto-char (point-min))
@@ -2469,9 +2494,12 @@ Unlike `vc-find-revision-save', doesn't save the buffer to the file."
 	      (kill-buffer (get-file-buffer filename)))))))
     (let ((result-buf (or buffer
                           (get-file-buffer filename)
-                          (find-file-noselect filename))))
+                          (find-file-noselect filename)))
+          (file (expand-file-name file))) ; ensure it's absolute
       (with-current-buffer result-buf
-        (setq-local vc-parent-buffer filebuf))
+        (setq-local vc-parent-buffer filebuf
+                    vc-buffer-overriding-fileset `(,backend (,file))
+                    vc-buffer-revision revision))
       result-buf)))
 
 ;; Header-insertion code
