@@ -693,6 +693,8 @@ for use at QPOS."
       ;; would be to return unquoted elements together with a function to
       ;; requote them, so that *Completions* can show nicer unquoted values
       ;; which only get quoted when needed by choose-completion.
+      ;; FIXME: *Completions* now shows unquoted values by using
+      ;; completion--unquoted, so this function can be greatly simplified.
       (nconc
        (mapcar (lambda (completion)
                  (cl-assert (string-prefix-p prefix completion 'ignore-case) t)
@@ -2440,7 +2442,7 @@ Runs of equal candidate strings are eliminated.  GROUP-FUN is a
   (if (not (consp str))
       (add-text-properties
        (point)
-       (let ((str (completion-lazy-hilit str)))
+       (let ((str (completion-for-display str)))
          (insert
           (if group-fun
               (funcall group-fun str 'transform)
@@ -4273,6 +4275,12 @@ details."
   (if (and completion-lazy-hilit completion-lazy-hilit-fn)
       (funcall completion-lazy-hilit-fn (copy-sequence str))
     str))
+
+(defun completion-for-display (str)
+  "Return the string that should be displayed for completion candidate STR.
+
+This will be `face'-propertized as appropriate."
+  (completion-lazy-hilit (or (get-text-property 0 'completion--unquoted str) str)))
 
 (defun completion--hilit-from-re (string regexp &optional point-idx)
   "Fontify STRING using REGEXP POINT-IDX.
