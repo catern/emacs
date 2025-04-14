@@ -1024,7 +1024,7 @@ away from the bottom.  Counts wrapped lines as real lines."
                                 'icomplete-selected-match 'append comp)
      collect (concat prefix
                      (make-string (max 0 (- max-prefix-len (length prefix))) ? )
-                     (completion-lazy-hilit comp)
+                     (completion-for-display comp)
                      (make-string (max 0 (- max-comp-len (length comp))) ? )
                      suffix)
      into lines-aux
@@ -1188,7 +1188,7 @@ matches exist."
                   (setq determ (concat open-bracket "" close-bracket)))
                 (while (and comps (not limit))
                   (setq comp
-                        (let ((cur (completion-lazy-hilit (car comps))))
+                        (let ((cur (completion-for-display (car comps))))
                           (if prefix-len (substring cur prefix-len) cur))
                         comps (cdr comps))
                   (setq prospects-len
