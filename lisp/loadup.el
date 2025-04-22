@@ -275,6 +275,7 @@
 (load "emacs-lisp/easymenu")
 (load "isearch")
 (load "rfn-eshadow")
+(load "emacs-lisp/regexp-opt")
 
 (load "menu-bar")
 (load "tab-bar")
@@ -295,8 +296,6 @@
 (if (fboundp 'x-create-frame)
     (progn
       (load "fringe")
-      ;; Needed by `imagemagick-register-types'
-      (load "emacs-lisp/regexp-opt")
       (load "image")
       (load "international/fontset")
       (load "dnd")
