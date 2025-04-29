@@ -8530,6 +8530,21 @@ Since it unloads Tramp, it shall be the last test to run."
   (should (featurep 'tramp))
   (should (featurep 'tramp-archive)))
 
+(defun tramp--split-on-boundary (s)
+  (let ((bounds (completion-boundaries s #'completion--file-name-table nil "")))
+    (cons (substring s nil (car bounds)) (substring s (car bounds)))))
+
+(ert-deftest tramp-test51-file-name-completion-boundaries ()
+  "Test file name completion boundaries are correct in various cases."
+  (should (equal (tramp--split-on-boundary "/ssh:user@host:foo")
+                 '("/ssh:user@host:" . "foo")))
+  (should (equal (tramp--split-on-boundary "/ssh:user@host:/~/foo")
+                 '("/ssh:user@host:/~/" . "foo")))
+  (should (equal (tramp--split-on-boundary "/ssh:user@host:/usr//usr/foo")
+                 '("/ssh:user@host:/usr//usr/" . "foo")))
+  (should (equal (tramp--split-on-boundary "/ssh:user@host:/ssh:user@host://usr/foo")
+                 '("/ssh:user@host:/ssh:user@host://usr/" . "foo"))))
+
 (defun tramp-test-all (&optional interactive)
   "Run all tests for \\[tramp].
 If INTERACTIVE is non-nil, the tests are run interactively."
