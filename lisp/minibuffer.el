@@ -3221,6 +3221,12 @@ The completion method is determined by `completion-at-point-functions'."
   (define-key map "\n" 'exit-minibuffer)
   (define-key map "\r" 'exit-minibuffer))
 
+(defun minibuffer-choose-completion-just-exit (&optional no-exit)
+  "Choose the selected completion from the minibuffer or call `exit-minibuffer'."
+  (interactive "P")
+  (or (minibuffer-choose-completion-if-selected no-exit)
+      (exit-minibuffer)))
+
 (defvar-keymap minibuffer-local-completion-map
   :doc "Local keymap for minibuffer input with completion."
   :parent minibuffer-local-map
@@ -3230,6 +3236,7 @@ The completion method is determined by `completion-at-point-functions'."
   ;; another binding for it.
   ;; "M-TAB"  #'minibuffer-force-complete
   "SPC"       #'minibuffer-complete-word
+  "RET"       #'minibuffer-choose-completion-just-exit
   "?"         #'minibuffer-completion-help
   "<prior>"   #'switch-to-completions
   "M-v"       #'switch-to-completions
@@ -3241,7 +3248,7 @@ The completion method is determined by `completion-at-point-functions'."
 (defvar-keymap minibuffer-local-must-match-map
   :doc "Local keymap for minibuffer input with completion, for exact match."
   :parent minibuffer-local-completion-map
-  "RET" #'minibuffer-complete-and-exit
+  "RET" #'minibuffer-choose-completion-or-exit
   "C-j" #'minibuffer-complete-and-exit)
 
 (defvar-keymap minibuffer-local-filename-completion-map
@@ -3338,18 +3345,34 @@ and `RET' accepts the input typed into the minibuffer."
 (defvar minibuffer-visible-completions--always-bind nil
   "If non-nil, force the `minibuffer-visible-completions' bindings on.")
 
+(defun minibuffer--completions-visible ()
+  "Return the window where the *Completions* buffer for this minibuffer is visible."
+  (when-let ((window (get-buffer-window "*Completions*" 0)))
+    (when (eq (buffer-local-value 'completion-reference-buffer
+                                  (window-buffer window))
+              (window-buffer (active-minibuffer-window)))
+      window)))
+
+(defun minibuffer-choose-completion-if-selected (&optional no-exit no-quit)
+  "Like `minibuffer-choose-completion', but do nothing if no candidate is selected.
+
+Return non-nil if a completion was chosen."
+  (when-let* ((window (minibuffer--completions-visible)))
+    (with-selected-window window
+      ;; Detect selection as if `choose-completion-deselect-if-after' is non-nil.
+      (when (get-text-property (point) 'completion--string)
+        (choose-completion nil no-exit no-quit)
+        t))))
+
 (defun minibuffer-visible-completions--filter (cmd)
   "Return CMD if `minibuffer-visible-completions' bindings should be active."
   (if minibuffer-visible-completions--always-bind
       cmd
-    (when-let* ((window (get-buffer-window "*Completions*" 0)))
-      (when (and (eq (buffer-local-value 'completion-reference-buffer
-                                         (window-buffer window))
-                     (window-buffer (active-minibuffer-window)))
-                 (if (eq cmd #'minibuffer-choose-completion-or-exit)
-                     (with-current-buffer (window-buffer window)
-                       (get-text-property (point) 'completion--string))
-                   t))
+    (when-let* ((window (minibuffer--completions-visible)))
+      (when (if (eq cmd #'minibuffer-choose-completion-or-exit)
+                (with-current-buffer (window-buffer window)
+                  (get-text-property (point) 'completion--string))
+              t)
         cmd))))
 
 (defun minibuffer-visible-completions--bind (binding)
@@ -5275,10 +5298,8 @@ When `minibuffer-choose-completion' can't find a completion candidate
 in the completions window, then exit the minibuffer using its present
 contents."
   (interactive "P")
-  (condition-case nil
-      (let ((choose-completion-deselect-if-after t))
-        (minibuffer-choose-completion no-exit no-quit))
-    (error (minibuffer-complete-and-exit))))
+  (or (minibuffer-choose-completion-if-selected no-exit no-quit)
+      (minibuffer-complete-and-exit)))
 
 (defun minibuffer-complete-history ()
   "Complete as far as possible using the minibuffer history.
