@@ -159,6 +159,15 @@ behavior, customize 'find-function-mode-lower-precedence' to non-nil.
 ---
 ** 'find-function' can now find 'cl-defmethod' invocations inside macros.
 
+---
+** Fetching documentation strings no longer reloads byte-compiled files.
+Previously, if you tried to look up documentation for a symbol defined
+by a byte-compiled file, and the file had changed since it was initially
+loaded, the file would be reloaded, redefining its functions and
+variables.  This could cause issues, so this behavior is now off by
+default.  You can re-enable it by setting 'documentation-dynamic-reload'
+non-nil.
+
 ** Minibuffer and Completions
 
 +++

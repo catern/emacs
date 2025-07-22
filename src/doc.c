@@ -337,7 +337,7 @@ string is passed through `substitute-command-keys'.  */)
   (Lisp_Object function, Lisp_Object raw)
 {
   Lisp_Object doc;
-  bool try_reload = true;
+  bool try_reload = documentation_dynamic_reload;
 
  retry:
 
@@ -410,7 +410,7 @@ This differs from `get' in that it can refer to strings stored in the
 aren't strings.  */)
   (Lisp_Object symbol, Lisp_Object prop, Lisp_Object raw)
 {
-  bool try_reload = true;
+  bool try_reload = documentation_dynamic_reload;
   Lisp_Object tem;
 
  retry:
@@ -716,6 +716,19 @@ You should never read the value of this variable directly from a Lisp
 program.  Use the function `text-quoting-style' instead, as that will
 compute the correct value for the current terminal in the nil case.  */);
   Vtext_quoting_style = Qnil;
+
+  DEFVAR_BOOL ("documentation-dynamic-reload", documentation_dynamic_reload,
+	       doc: /* If non-nil, on failure to fetch a docstring, reload the file.
+
+Documentation strings are read on-demand, only when documentation is
+requested for the appropriate symbol, for the `etc/DOC' file and for
+files byte-compiled with non-nil `byte-compile-dynamic-docstring'.
+Reading these files may fail if the files have been modified since they
+were originally loaded.  If this variable is non-nil, then the files
+will be loaded again on failure, redefining all functions and variables
+inside, which may allow documentation strings to be fetched
+successfully.  */);
+  documentation_dynamic_reload = false;
 
   DEFVAR_BOOL ("internal--text-quoting-flag", text_quoting_flag,
 	       doc: /* If nil, a nil `text-quoting-style' is treated as `grave'.  */);
