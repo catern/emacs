@@ -1115,6 +1115,12 @@ pattern \"foobar*\".")
 I.e. when completing \"foo_bar\" (where _ is the position of point),
 it will consider all completions candidates matching the glob
 pattern \"foo*\" and will add back \"bar\" to the end of it.")
+    (ignore-after-point
+     completion-ignore-after-point-try-completion completion-ignore-after-point-all-completions
+     "Prefix completion that only operates on the text before point.
+I.e. when completing \"foo_bar\" (where _ is the position of point),
+it will consider all completions candidates matching the glob
+pattern \"foo*\" and will add back \"bar\" to the end of it.")
     (basic
      completion-basic-try-completion completion-basic-all-completions
      "Completion of the prefix before point and the suffix after point.
@@ -3989,6 +3995,85 @@ Like `internal-complete-buffer', but removes BUFFER from the completion list."
      (all-completions beforepoint table pred)
      point
      (car (completion-boundaries beforepoint table pred "")))))
+
+;;; ignore-after-point completion style.
+
+(defvar completion-ignore-after-point--force-nil nil
+  "When non-nil, the ignore-after-point style always returns nil.")
+
+(defface completions-ignored
+  '((t (:inherit shadow)))
+  "Face for text which was ignored by the completion style.")
+
+(defun completion-ignore-after-point-try-completion (string table pred point)
+  "Run `completion-try-completion' ignoring the part of STRING after POINT.
+
+We add the part of STRING after POINT back to the result."
+  (let* ((old-point (next-single-property-change 0 'completion-ignore-after-point-old-point string))
+         (point (if old-point (max point old-point) point))
+         (prefix (substring string 0 point))
+         (suffix (substring string point)))
+    (when-let ((completion
+                (unless completion-ignore-after-point--force-nil
+                  (let ((completion-ignore-after-point--force-nil t))
+                    (completion-try-completion prefix table pred point)))))
+      ;; Add SUFFIX back to COMPLETION.  However, previous completion styles failed and
+      ;; this one succeeded by ignoring SUFFIX.  The success of future completion depends
+      ;; on ignoring SUFFIX.  We mostly do that by keeping point right before SUFFIX.
+      (if (eq completion t)
+          ;; Keep point in the same place, right before SUFFIX.
+          (cons string point)
+        (let ((newstring (car completion))
+              (newpoint (cdr completion)))
+          (cond
+           ((= (length newstring) newpoint)
+            ;; NEWPOINT is already right before SUFFIX.
+            (cons (concat newstring suffix) newpoint))
+           ((string-empty-p suffix)
+            ;; Nothing to ignore
+            (cons newstring newpoint))
+           ((get-text-property 0 'completion-ignore-after-point-old-point suffix)
+            ;; The suffix already has the text property which makes us ignore it.
+            (cons (concat newstring suffix) newpoint))
+           ((= (aref suffix 0) ? )
+            ;; The suffix starts with a space; add the text property so we ignore it.
+            (setq-local minibuffer-allow-text-properties t)
+            (put-text-property 0 1 'completion-ignore-after-point-old-point t suffix)
+            (cons (concat newstring suffix) newpoint))
+           (t
+            ;; Add a space with the text property.
+            (setq-local minibuffer-allow-text-properties t)
+            (let ((space (propertize " " 'completion-ignore-after-point-old-point t)))
+              (cons (concat newstring space suffix) newpoint)))))))))
+
+(defun completion-ignore-after-point-all-completions (string table pred point)
+  "Run `completion-all-completions' ignoring the part of STRING after POINT."
+  (let* ((old-point (next-single-property-change 0 'completion-ignore-after-point-old-point string))
+         (point (if old-point (max point old-point) point))
+         (prefix (substring string 0 point))
+         (suffix (substring string point)))
+    (when-let ((completions
+                (unless completion-ignore-after-point--force-nil
+                  (let ((completion-ignore-after-point--force-nil t))
+                    (completion-all-completions prefix table pred point)))))
+      ;; Add SUFFIX back to some completions.  COMPLETIONS may be an improper
+      ;; list (with the base position in its last cdr) so we can't use `mapcar'.
+      (let ((tail completions))
+        (while (consp tail)
+          (let* ((completion (car tail))
+                 (bounds (completion-boundaries completion table pred suffix)))
+            ;; Include the suffix if this completion is like a directory: it
+            ;; leads to new completions.  There's a similar check in
+            ;; `choose-completion-string'.
+            (when (= (car bounds) (length completion))
+              (let ((end-of-real-completion (length completion)))
+                (setcar tail (concat completion suffix))
+                ;; When chosen, point should go before SUFFIX.
+                (put-text-property
+                 0 1 'completion-position-after-insert end-of-real-completion
+                 (car tail)))))
+          (setq tail (cdr tail))))
+      completions)))
 
 ;;; Basic completion.
 

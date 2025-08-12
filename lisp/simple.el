@@ -10474,10 +10474,13 @@ back on `completion-list-insert-choice-function' when nil."
         ;; comes from buffer-substring-no-properties.
         ;;(remove-text-properties 0 (length choice) '(mouse-face nil) choice)
 	;; Insert the completion into the buffer where it was requested.
-        (funcall (or insert-function completion-list-insert-choice-function)
-                 (or (car base-position) (point))
-                 (or (cadr base-position) (point))
-                 choice)
+        (let ((beg (or (car base-position) (point)))
+              (end (or (cadr base-position) (point))))
+          (funcall (or insert-function completion-list-insert-choice-function)
+                   beg end choice)
+          (unless (string-empty-p choice)
+            (when-let ((pos (get-text-property 0 'completion-position-after-insert choice)))
+              (goto-char (+ pos beg)))))
         ;; Update point in the window that BUFFER is showing in.
 	(let ((window (get-buffer-window buffer t)))
 	  (set-window-point window (point)))
