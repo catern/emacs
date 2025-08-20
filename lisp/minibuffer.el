@@ -4745,24 +4745,22 @@ the same set of elements."
               ;; different capitalizations in different parts.
               ;; In practice, it doesn't seem to make any difference.
               (setq ccs (nreverse ccs))
-              (let* ((prefix (try-completion "" comps))
-                     (unique (or (and (eq prefix t) (setq prefix ""))
-                                 (and (stringp prefix)
-                                      ;; If PREFIX is equal to all of COMPS,
-                                      ;; then PREFIX is a unique completion.
-                                      (seq-every-p
-                                       (lambda (comp) (= (length prefix) (length comp)))
-                                       comps)))))
-                ;; If there's only one completion, `elem' is not useful
-                ;; any more: it can only match the empty string.
-                ;; FIXME: in some cases, it may be necessary to turn an
-                ;; `any' into a `star' because the surrounding context has
-                ;; changed such that string->pattern wouldn't add an `any'
-                ;; here any more.
-                (if unique
-                    ;; If the common prefix is unique, it also is a common
-                    ;; suffix, so we should add it for `prefix' elements.
-                    (push prefix res)
+              (let ((prefix (try-completion "" comps)))
+                (cond
+                 ((eq prefix t)
+                  ;; This wildcard is matching only empty strings, so drop it.
+                  nil)
+                 ((seq-every-p
+                   (lambda (comp) (= (length prefix) (length comp)))
+                   comps)
+                  ;; PREFIX is equal to all of COMPS, so the wildcard can't grow anymore
+                  ;; after PREFIX.
+                  ;; FIXME: in some cases, it may be necessary to turn an
+                  ;; `any' into a `star' because the surrounding context has
+                  ;; changed such that string->pattern wouldn't add an `any'
+                  ;; here any more.
+                  (push prefix res))
+                 (t
                   ;; `prefix' only wants to include the fixed part before the
                   ;; wildcard, not the result of growing that fixed part.
                   (unless (seq-every-p (lambda (elem) (eq elem 'prefix)) wildcards)
@@ -4789,7 +4787,7 @@ the same set of elements."
                       (unless (equal suffix "")
                         (push suffix res))))
                   ;; We pushed these wildcards on RES, so we're done with them.
-                  (setq wildcards nil))))))
+                  (setq wildcards nil)))))))
         ;; We return it in reverse order.
         res)))))
 

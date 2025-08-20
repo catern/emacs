@@ -320,7 +320,11 @@
   (should (equal
            (completion-pcm--merge-try
             '(prefix any "bar" any) '("xbarxfoo" "ybaryfoo") "" "")
-           '("bar" . 3))))
+           '("bar" . 3)))
+  ;; Wildcards are deleted if they have a perfect match
+  (should (equal
+           (completion-pcm--merge-try '(prefix "$") '("aaa$" "aaa$") "" "")
+           '("aaa$" . 4))))
 
 (ert-deftest completion-pcm-test-8 ()
   ;; try-completion inserts the common prefix and suffix at point.
